@@ -1,12 +1,21 @@
-from collections.abc import AsyncIterable, AsyncIterator
-from typing import Any, ClassVar
+from collections.abc import AsyncIterable
+from collections.abc import AsyncIterator
+from typing import Any
+from typing import ClassVar
 
-from agents import Agent, Runner, SQLiteSession, set_tracing_disabled
+from agents import Agent
+from agents import Runner
+from agents import SQLiteSession
+from agents import set_tracing_disabled
+from agents.items import MessageOutputItem
+from agents.items import ReasoningItem
 from agents.result import RunResultStreaming
-from agents.items import MessageOutputItem, ReasoningItem
 from agents.usage import serialize_usage
 
-from agnos.messages import AgentText, AgentThinking, AgentQueryCompleted, AgentEvent
+from agnos.messages import AgentEvent
+from agnos.messages import AgentQueryCompleted
+from agnos.messages import AgentText
+from agnos.messages import AgentThinking
 from agnos.options import AgentOptions
 
 from .pricing import estimate_openai_total_cost_usd
@@ -82,9 +91,7 @@ class OpenAIBackend:
         if not self._connected:
             raise RuntimeError("Backend is not connected; use `async with Client(...)` first.")
         if self._pending_run is not None:
-            raise RuntimeError(
-                "A turn is already queued. Call receive_response() before query() again."
-            )
+            raise RuntimeError("A turn is already queued. Call receive_response() before query() again.")
         if not isinstance(prompt, str):
             raise TypeError("OpenAI backend only supports string prompts in this version.")
         session = self._session_for(session_id)
@@ -98,9 +105,7 @@ class OpenAIBackend:
         if not self._connected:
             raise RuntimeError("Backend is not connected; use `async with Client(...)` first.")
         if self._pending_run is not None:
-            raise RuntimeError(
-                "A turn is already queued. Call receive_response() before query_and_receive()."
-            )
+            raise RuntimeError("A turn is already queued. Call receive_response() before query_and_receive().")
         if not isinstance(prompt, str):
             raise TypeError("OpenAI backend only supports string prompts in this version.")
 

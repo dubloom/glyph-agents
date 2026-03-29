@@ -22,8 +22,8 @@ Type a blank line or ``/quit`` to exit.
 
 import asyncio
 
-from agnos import AgentOptions, AgentText, AgentThinking, AgentQueryCompleted, Client, resolve_backend
-
+from agnos import AgentOptions
+from agnos import Client
 
 
 async def main() -> None:

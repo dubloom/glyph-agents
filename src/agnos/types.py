@@ -5,7 +5,6 @@ from typing import Optional
 
 @dataclass
 class ModelOptions:
-
     # not supported by claude_agent SDK
     temperature: Optional[float] = None
 

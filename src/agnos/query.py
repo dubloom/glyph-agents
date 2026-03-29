@@ -1,4 +1,5 @@
-from collections.abc import AsyncIterable, AsyncIterator
+from collections.abc import AsyncIterable
+from collections.abc import AsyncIterator
 from typing import Any
 
 from agnos.client import Client

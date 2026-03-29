@@ -1,7 +1,9 @@
 """Internal backend contract."""
 
-from collections.abc import AsyncIterable, AsyncIterator
-from typing import Any, Protocol
+from collections.abc import AsyncIterable
+from collections.abc import AsyncIterator
+from typing import Any
+from typing import Protocol
 
 from agnos.messages import AgentEvent
 

@@ -13,5 +13,78 @@ dependencies = [
     "openai-agents"
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.14.10,<0.15",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+exclude = [
+    ".venv*",
+    ".git",
+    "__pycache__",
+    ".eggs",
+    "*.egg",
+    "build",
+]
+lint.ignore = [
+    "A003",
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D106",
+    "D107",
+    "D200",
+    "D202",
+    "D204",
+    "D205",
+    "D208",
+    "D210",
+    "D300",
+    "D400",
+    "D401",
+    "D403",
+    "D404",
+    "D413",
+    "E203",
+    "E231",
+    "E721",
+    "G201",
+]
+line-length = 120
+lint.preview = true
+lint.explicit-preview-rules = true
+lint.select = [
+    "A",
+    "D",
+    "E",
+    "F",
+    "G",
+    "I",
+    "PLW0244",
+    "UP006",
+    "W",
+]
+lint.unfixable = ["F401"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff.lint.isort]
+force-single-line = true
+lines-after-imports = 2
+force-sort-within-sections = true
+known-first-party = ["agnos"]
+relative-imports-order = "furthest-to-closest"

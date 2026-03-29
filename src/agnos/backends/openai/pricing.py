@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
+
 _TOKENS_PER_MILLION = 1_000_000
 _REGIONAL_UPLIFT_MODELS = ("gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.4-pro")
 _REGIONAL_UPLIFT_MULTIPLIER = 1.10
@@ -116,9 +117,7 @@ def estimate_openai_total_cost_usd(
     output_cost_usd = (output_tokens / _TOKENS_PER_MILLION) * pricing.output_usd_per_million
 
     if pricing.cached_input_usd_per_million is not None:
-        cached_input_cost_usd = (
-            (cached_tokens / _TOKENS_PER_MILLION) * pricing.cached_input_usd_per_million
-        )
+        cached_input_cost_usd = (cached_tokens / _TOKENS_PER_MILLION) * pricing.cached_input_usd_per_million
     else:
         cached_input_cost_usd = (cached_tokens / _TOKENS_PER_MILLION) * pricing.input_usd_per_million
 

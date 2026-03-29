@@ -1,7 +1,9 @@
 """Vendor-neutral stream events (not Claude-shaped assistant messages)."""
 
-from dataclasses import dataclass, field
-from typing import Any, TypeAlias
+from dataclasses import dataclass
+from dataclasses import field
+from typing import Any
+from typing import TypeAlias
 
 
 @dataclass

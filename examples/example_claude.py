@@ -6,7 +6,10 @@ name clashes on ``sys.path`` when run from this folder.
 
 import asyncio
 
-from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient, TextBlock
+from claude_agent_sdk import AssistantMessage
+from claude_agent_sdk import ClaudeAgentOptions
+from claude_agent_sdk import ClaudeSDKClient
+from claude_agent_sdk import TextBlock
 
 
 # If you specifically want the name "ClaudeClient", alias it here.

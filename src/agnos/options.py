@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
+
 ProviderName = Literal["auto", "openai", "claude"]
 BackendName = Literal["openai", "claude"]
 
@@ -56,8 +57,7 @@ def resolve_backend(options: AgentOptions) -> BackendName:
 
     if is_claude and is_openai:
         raise ValueError(
-            f"Ambiguous model {options.model!r} for provider 'auto'; "
-            "set provider to 'openai' or 'claude' explicitly."
+            f"Ambiguous model {options.model!r} for provider 'auto'; set provider to 'openai' or 'claude' explicitly."
         )
     if is_claude:
         return "claude"
