@@ -34,4 +34,25 @@ class AgentQueryCompleted:
     """Vendor-specific fields (e.g. ``duration_ms``, ``total_cost_usd``) for debugging."""
 
 
-AgentEvent: TypeAlias = AgentText | AgentThinking | AgentQueryCompleted
+@dataclass
+class AgentToolCall:
+    """Structured tool invocation request."""
+
+    name: str | None = None
+    call_id: str | None = None
+    arguments: Any = None
+    tool_type: str | None = None
+
+
+@dataclass
+class AgentToolResult:
+    """Structured tool invocation result."""
+
+    name: str | None = None
+    call_id: str | None = None
+    output: Any = None
+    is_error: bool | None = None
+    tool_type: str | None = None
+
+
+AgentEvent: TypeAlias = AgentText | AgentThinking | AgentToolCall | AgentToolResult | AgentQueryCompleted

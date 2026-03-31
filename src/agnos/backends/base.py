@@ -33,6 +33,14 @@ class AgentBackend(Protocol):
         """Convenience API: send a turn and collect all normalized events."""
         ...
 
+    async def query_streamed(
+        self,
+        prompt: str | AsyncIterable[dict[str, Any]],
+        session_id: str = "default",
+    ) -> AsyncIterator[AgentEvent]:
+        """Convenience API: send a turn and stream normalized events."""
+        ...
+
     async def receive_response(self) -> AsyncIterator[AgentEvent]:
         """Stream normalized agent events until the turn is complete."""
         ...

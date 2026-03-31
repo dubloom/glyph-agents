@@ -49,6 +49,14 @@ class Client:
     ) -> list[AgentEvent]:
         return await self._backend.query_and_receive(prompt, session_id=session_id)
 
+    async def query_streamed(
+        self,
+        prompt: str | AsyncIterable[dict[str, Any]],
+        session_id: str = "default",
+    ) -> AsyncIterator[AgentEvent]:
+        async for msg in self._backend.query_streamed(prompt, session_id=session_id):
+            yield msg
+
     async def receive_response(self) -> AsyncIterator[AgentEvent]:
         async for msg in self._backend.receive_response():
             yield msg

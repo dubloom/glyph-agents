@@ -48,8 +48,7 @@ async def main() -> None:
     options = AgentOptions(model="gpt-4.1")
 
     async with Client(options) as client:
-        await client.query("Give me one sentence about Rome.")
-        async for event in client.receive_response():
+        async for event in client.query_streamed("Give me one sentence about Rome."):
             if isinstance(event, AgentThinking):
                 print("[thinking]", event.text)
             elif isinstance(event, AgentText):
@@ -80,7 +79,7 @@ If model inference is unknown or ambiguous, set `provider` explicitly.
 ## Notes
 
 - Use `Client` as an async context manager (`async with Client(...)`).
-- Turn order for `Client` is `query(...)` then `receive_response()`.
+- Turn order for `Client` is `query(...)` then `receive_response()`, or just `query_streamed(...)`.
 - Backend errors are emitted as `AgentQueryCompleted(is_error=True, ...)`.
 
 ## Examples
@@ -89,4 +88,5 @@ If model inference is unknown or ambiguous, set `provider` explicitly.
 python examples/agnos/simple_query.py
 python examples/agnos/stream.py
 python examples/agnos/query_and_receive.py
+python examples/agnos/coding_agent_cli.py --cwd .
 ```

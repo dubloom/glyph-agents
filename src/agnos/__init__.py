@@ -5,7 +5,10 @@ from agnos.messages import AgentEvent
 from agnos.messages import AgentQueryCompleted
 from agnos.messages import AgentText
 from agnos.messages import AgentThinking
+from agnos.messages import AgentToolCall
+from agnos.messages import AgentToolResult
 from agnos.options import AgentOptions
+from agnos.options import PermissionPolicy
 from agnos.options import resolve_backend
 from agnos.query import query
 
@@ -15,8 +18,11 @@ __all__ = [
     "AgentOptions",
     "AgentText",
     "AgentThinking",
+    "AgentToolCall",
+    "AgentToolResult",
     "AgentQueryCompleted",
     "Client",
+    "PermissionPolicy",
     "query",
     "resolve_backend",
 ]

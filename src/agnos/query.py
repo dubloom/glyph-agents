@@ -15,6 +15,5 @@ async def query(
 ) -> AsyncIterator[AgentEvent]:
     """One-shot helper: send a prompt and stream normalized events."""
     async with Client(options) as client:
-        await client.query(prompt, session_id=session_id)
-        async for message in client.receive_response():
+        async for message in client.query_streamed(prompt, session_id=session_id):
             yield message
