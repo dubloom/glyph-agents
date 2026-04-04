@@ -124,6 +124,7 @@ class OpenAIBackend:
 
     def __init__(self, options: AgentOptions) -> None:
         self._model = options.model
+        self._max_turns = options.max_turns
         allowed_tools, disallowed_tools = options.effective_tool_lists()
         confirm_patches, confirm_bash = options.openai_confirmations()
         tools = make_openai_builtin_tools(
@@ -173,7 +174,10 @@ class OpenAIBackend:
         if not isinstance(prompt, str):
             raise TypeError("OpenAI backend only supports string prompts in this version.")
         session = self._session_for(session_id)
-        self._pending_run = Runner.run_streamed(self._agent, input=prompt, session=session)
+        run_kw: dict[str, Any] = {"input": prompt, "session": session}
+        if self._max_turns is not None:
+            run_kw["max_turns"] = self._max_turns
+        self._pending_run = Runner.run_streamed(self._agent, **run_kw)
 
     async def query_and_receive(
         self,
@@ -189,7 +193,10 @@ class OpenAIBackend:
 
         session = self._session_for(session_id)
         try:
-            result = await Runner.run(self._agent, input=prompt, session=session)
+            run_kw: dict[str, Any] = {"input": prompt, "session": session}
+            if self._max_turns is not None:
+                run_kw["max_turns"] = self._max_turns
+            result = await Runner.run(self._agent, **run_kw)
         except Exception as exc:
             return [
                 AgentQueryCompleted(

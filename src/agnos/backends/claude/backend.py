@@ -129,6 +129,8 @@ class ClaudeBackend:
             claude_kw["disallowed_tools"] = list(disallowed_tools)
         if permission_mode is not None:
             claude_kw["permission_mode"] = permission_mode
+        if options.max_turns is not None:
+            claude_kw["max_turns"] = options.max_turns
         if hooks is not None:
             claude_kw["hooks"] = hooks
         claude_opts = ClaudeAgentOptions(**claude_kw)

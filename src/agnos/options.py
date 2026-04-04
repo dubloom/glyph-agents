@@ -81,6 +81,7 @@ class AgentOptions:
     allowed_tools: Sequence[str] | None = None
     disallowed_tools: Sequence[str] | None = None
     permission: PermissionPolicy = field(default_factory=PermissionPolicy)
+    max_turns: int | None = None
 
     def __post_init__(self) -> None:
         self.model = self.model.strip()
@@ -91,12 +92,20 @@ class AgentOptions:
         self.allowed_tools = normalize_claude_tool_list(self.allowed_tools)
         self.disallowed_tools = normalize_claude_tool_list(self.disallowed_tools)
         self._validate_permission(self.permission)
+        self._validate_max_turns(self.max_turns)
 
     @staticmethod
     def _validate_permission(policy: PermissionPolicy) -> None:
         allowed: tuple[PermissionLevel, ...] = ("auto", "ask", "deny")
         if policy.mode not in allowed or policy.edit not in allowed or policy.execute not in allowed:
             raise ValueError("permission values must be one of: auto, ask, deny.")
+
+    @staticmethod
+    def _validate_max_turns(max_turns: int | None) -> None:
+        if max_turns is None:
+            return
+        if not isinstance(max_turns, int) or max_turns <= 0:
+            raise ValueError("max_turns must be a positive integer when provided.")
 
     @property
     def workspace(self) -> Path:

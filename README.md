@@ -21,6 +21,7 @@ async def main() -> None:
         model="gpt-4.1-mini",  # or "claude-sonnet-4-20250514"
         instructions="You are a helpful assistant.",
         provider="auto",  # "openai", "claude", or "auto"
+        max_turns=25,  # optional; overrides backend default turn cap
     )
 
     async for event in query(prompt="Tell me one fact about Rome.", options=options):
