@@ -3,6 +3,7 @@ from collections.abc import AsyncIterable
 from collections.abc import AsyncIterator
 from collections.abc import Iterator
 import json
+import logging
 from pathlib import Path
 import sys
 from typing import Any
@@ -29,6 +30,7 @@ from agnos.usage import normalize_usage
 
 _EDIT_TOOLS = frozenset({"write", "edit", "multiedit"})
 _EXECUTE_TOOLS = frozenset({"bash"})
+_LOGGER = logging.getLogger(__name__)
 
 
 def _tool_capability(tool_name: str) -> str | None:
@@ -156,6 +158,10 @@ class ClaudeBackend:
     """Delegates to ``ClaudeSDKClient`` and maps assistant output to shared event types."""
 
     def __init__(self, options: AgentOptions) -> None:
+        if options.reasoning_effort is not None or options.reasoning_summary is not None:
+            _LOGGER.warning(
+                "Ignoring `reasoning_effort`/`reasoning_summary`: these options are only supported with the OpenAI backend."
+            )
         allowed_tools, disallowed_tools = options.effective_tool_lists()
         permission_mode = options.claude_permission_mode()
         hooks = _make_pre_tool_use_hooks(options)

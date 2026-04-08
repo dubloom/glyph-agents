@@ -17,6 +17,8 @@ from agents.items import ToolCallOutputItem
 from agents.result import RunResultStreaming
 from agents.run import DEFAULT_MAX_TURNS
 from agents.usage import serialize_usage
+from agents.model_settings import ModelSettings
+from agents.model_settings import Reasoning
 
 from agnos.messages import AgentEvent
 from agnos.messages import AgentQueryCompleted
@@ -180,6 +182,13 @@ class OpenAIBackend:
             "instructions": instructions,
             "model": options.model,
         }
+        if options.reasoning_effort is not None or options.reasoning_summary is not None:
+            agent_kw["model_settings"] = ModelSettings(
+                reasoning=Reasoning(
+                    effort=options.reasoning_effort,
+                    summary=options.reasoning_summary,
+                )
+            )
         if tools:
             agent_kw["tools"] = tools
         self._agent = Agent(**agent_kw)

@@ -9,6 +9,8 @@ from typing import Literal
 
 BackendName = Literal["openai", "claude"]
 PermissionLevel = Literal["auto", "ask", "deny"]
+OpenAIReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh"]
+OpenAIReasoningSummary = Literal["auto", "concise", "detailed"]
 
 # Claude Agent SDK built-in tool names (canonical casing).
 _KNOWN_CLAUDE_TOOL_NAMES: frozenset[str] = frozenset(
@@ -81,6 +83,8 @@ class AgentOptions:
     disallowed_tools: Sequence[str] | None = None
     permission: PermissionPolicy = field(default_factory=PermissionPolicy)
     max_turns: int | None = None
+    reasoning_effort: OpenAIReasoningEffort | None = None
+    reasoning_summary: OpenAIReasoningSummary | None = None
 
     def __post_init__(self) -> None:
         self.model = self.model.strip()
