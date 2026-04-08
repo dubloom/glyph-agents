@@ -1,9 +1,11 @@
+import hashlib
 import os
 from pathlib import Path
+
 from agents import apply_diff
 from agents.editor import ApplyPatchOperation
 from agents.editor import ApplyPatchResult
-import hashlib
+
 
 class ApprovalTracker:
     def __init__(self) -> None:

@@ -1,13 +1,33 @@
 """Workspace-scoped grep_files built-in for OpenAI Agents."""
 
-import re
 from pathlib import Path
+import re
 from typing import Annotated
 
 from agents import function_tool
 
+
 _GREP_MAX_MATCHES = 80
 _GREP_MAX_FILE_BYTES = 256 * 1024
+
+
+def _read_text_if_small(path: Path, max_bytes: int) -> str | None:
+    """Read file content when small and text-like, else ``None``."""
+    probe_size = min(4096, max_bytes + 1)
+    try:
+        with path.open("rb") as f:
+            head = f.read(probe_size)
+            if b"\x00" in head:
+                return None
+            remaining = max_bytes + 1 - len(head)
+            tail = f.read(remaining) if remaining > 0 else b""
+    except OSError:
+        return None
+
+    data = head + tail
+    if len(data) > max_bytes:
+        return None
+    return data.decode(encoding="utf-8", errors="replace")
 
 
 def make_grep_files_tool(root: Path):
@@ -33,10 +53,9 @@ def make_grep_files_tool(root: Path):
                 rel = p.resolve().relative_to(root)
             except ValueError:
                 continue
-            data = p.read_bytes()
-            if len(data) > _GREP_MAX_FILE_BYTES or b"\x00" in data[:4096]:
+            text = _read_text_if_small(p, _GREP_MAX_FILE_BYTES)
+            if text is None:
                 continue
-            text = data.decode(encoding="utf-8", errors="replace")
             for i, line in enumerate(text.splitlines(), start=1):
                 if rx.search(line):
                     lines_out.append(f"{rel.as_posix()}:{i}:{line[:500]}")
