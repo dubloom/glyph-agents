@@ -33,17 +33,21 @@ from .pricing import estimate_openai_total_cost_usd
 from .tools import make_openai_builtin_tools
 
 
-def _reasoning_text(item: ReasoningItem) -> str:
+def _reasoning_text(item: ReasoningItem) -> tuple[str,str]:
     raw = item.raw_item
     summaries = getattr(raw, "summary", None)
+    item_id = getattr(raw, "id" , None)
+
     if not summaries:
-        return ""
+        return "", item_id
+
     parts: list[str] = []
     for entry in summaries:
         t = getattr(entry, "text", None)
         if isinstance(t, str) and t:
             parts.append(t)
-    return "\n".join(parts)
+
+    return "\n".join(parts), item_id
 
 
 def _get_message_item_content(item: MessageOutputItem) -> list[str]:
@@ -68,6 +72,7 @@ def _tool_call_started(item: ToolCallItem) -> AgentToolCall:
     raw = item.raw_item
     raw_type = _get_attr_or_key(raw, "type")
     name = _get_attr_or_key(raw, "name")
+
     if not isinstance(name, str) or not name:
         name = raw_type if isinstance(raw_type, str) else None
     return AgentToolCall(
@@ -75,8 +80,7 @@ def _tool_call_started(item: ToolCallItem) -> AgentToolCall:
         call_id=_get_attr_or_key(raw, "call_id") or _get_attr_or_key(raw, "id"),
         arguments=(
             _get_attr_or_key(raw, "arguments")
-            or _get_attr_or_key(raw, "action")
-            or _get_attr_or_key(raw, "input")
+            or _get_attr_or_key(raw, "operation")
         ),
         tool_type=raw_type if isinstance(raw_type, str) else None,
     )
@@ -85,36 +89,35 @@ def _tool_call_started(item: ToolCallItem) -> AgentToolCall:
 def _tool_call_completed(item: ToolCallOutputItem) -> AgentToolResult:
     raw = item.raw_item
     raw_type = _get_attr_or_key(raw, "type")
+    raw_status = _get_attr_or_key(raw,"status")
+
     return AgentToolResult(
-        name=None,
         call_id=_get_attr_or_key(raw, "call_id") or _get_attr_or_key(raw, "id"),
         output=item.output,
-        is_error=bool(_get_attr_or_key(raw, "is_error")) if _get_attr_or_key(raw, "is_error") is not None else None,
+        status= raw_status if raw_status else "completed",
         tool_type=raw_type if isinstance(raw_type, str) else None,
     )
 
 
-def _openai_tool_instructions(workspace_root: str) -> str:
+def _openai_tool_guidance_instructions() -> str:
     return (
-        "You are a careful coding assistant working inside a single workspace directory. "
-        f"Workspace root: {workspace_root}. "
         "Use glob_files and grep_files to locate content, read_file to inspect files. "
         "To create, update, or delete files, use the apply_patch tool only. "
-        "When modifying an existing file, include the current file contents between "
-        "<BEGIN_FILES> and <END_FILES> in your message (see OpenAI apply_patch guidance). "
-        "Prefer minimal, correct patches. Paths are relative to the workspace unless absolute "
-        "but still inside that directory."
+        "Never claim files were changed unless apply_patch succeeded. "
+        "Prefer minimal, correct patches."
     )
 
-
 def _merge_openai_instructions(options: AgentOptions, tools_enabled: bool) -> str:
-    base = (options.instructions or "").strip()
+    user_instructions = (options.instructions or "").strip()
     if not tools_enabled:
-        return options.instructions or ""
-    extra = _openai_tool_instructions(str(options.workspace))
-    if base:
-        return f"{base}\n\n{extra}"
-    return extra
+        return user_instructions
+
+    sections: list[str] = []
+    sections.append(_openai_tool_guidance_instructions())
+    if user_instructions:
+        # Put caller-provided instructions last so they can refine default guidance.
+        sections.append(user_instructions)
+    return "\n\n".join(sections)
 
 
 def _openai_stop_reason(context_wrapper: Any) -> str:
@@ -146,9 +149,9 @@ def _openai_success_completion(model: str, context_wrapper: Any, final_output: A
 def _iter_events_for_run_item(item: RunItem) -> Iterator[AgentEvent]:
     """Map one OpenAI Agents ``RunItem`` to zero or more ``AgentEvent`` (shared by run + stream)."""
     if isinstance(item, ReasoningItem):
-        text = _reasoning_text(item)
+        text, item_id = _reasoning_text(item)
         if text:
-            yield AgentThinking(text=text, signature=None)
+            yield AgentThinking(text=text, signature=item_id)
     elif isinstance(item, MessageOutputItem):
         for segment in _get_message_item_content(item):
             yield AgentText(text=segment)
@@ -182,11 +185,11 @@ class OpenAIBackend:
             "instructions": instructions,
             "model": options.model,
         }
-        if options.reasoning_effort is not None or options.reasoning_summary is not None:
+        if options.reasoning_effort is not None:
             agent_kw["model_settings"] = ModelSettings(
                 reasoning=Reasoning(
-                    effort=options.reasoning_effort,
-                    summary=options.reasoning_summary,
+                    effort=options.reasoning_effort or "low",
+                    summary=options.reasoning_summary or "auto",
                 )
             )
         if tools:

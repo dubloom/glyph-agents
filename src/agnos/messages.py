@@ -48,10 +48,9 @@ class AgentToolCall:
 class AgentToolResult:
     """Structured tool invocation result."""
 
-    name: str | None = None
     call_id: str | None = None
     output: Any = None
-    is_error: bool | None = None
+    status: bool | None = None
     tool_type: str | None = None
 
 

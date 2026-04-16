@@ -5,6 +5,3 @@ __pycache__
 *venv*
 vendor
 build
-
-examples/claude
-examples/openai

@@ -17,6 +17,7 @@ from claude_agent_sdk import TextBlock as ClaudeTextBlock
 from claude_agent_sdk import ThinkingBlock as ClaudeThinkingBlock
 from claude_agent_sdk import ToolResultBlock as ClaudeToolResultBlock
 from claude_agent_sdk import ToolUseBlock as ClaudeToolUseBlock
+from claude_agent_sdk import UserMessage
 
 from agnos.messages import AgentEvent
 from agnos.messages import AgentQueryCompleted
@@ -125,7 +126,7 @@ def _iter_events_for_claude_content_block(block: object) -> Iterator[AgentEvent]
         yield AgentToolResult(
             call_id=block.tool_use_id,
             output=block.content,
-            is_error=block.is_error,
+            status="completed" if not block.is_error else "error" ,
             tool_type="tool_result",
         )
 
@@ -234,7 +235,7 @@ class ClaudeBackend:
         events: list[AgentEvent] = []
         try:
             async for msg in self._client.receive_response():
-                if isinstance(msg, ClaudeAssistantMessage):
+                if isinstance(msg, ClaudeAssistantMessage) or isinstance(msg, UserMessage):
                     for block in msg.content:
                         events.extend(_iter_events_for_claude_content_block(block))
                 elif isinstance(msg, ClaudeResultMessage):
@@ -248,7 +249,7 @@ class ClaudeBackend:
             raise RuntimeError("Backend is not connected; use `async with Client(...)` first.")
         try:
             async for msg in self._client.receive_messages():
-                if isinstance(msg, ClaudeAssistantMessage):
+                if isinstance(msg, ClaudeAssistantMessage) or isinstance(msg, UserMessage):
                     for block in msg.content:
                         for ev in _iter_events_for_claude_content_block(block):
                             yield ev
