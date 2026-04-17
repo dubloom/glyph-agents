@@ -10,11 +10,18 @@ from agnos.backends.openai.tools.bash import make_bash_tool
 from agnos.backends.openai.tools.glob import make_glob_files_tool
 from agnos.backends.openai.tools.grep import make_grep_files_tool
 from agnos.backends.openai.tools.read import make_read_file_tool
-from agnos.options import CLAUDE_TO_OPENAI_BUILTIN
+from agnos.options import ApprovalHandler
 
 
-_UNSUPPORTED_ON_OPENAI = frozenset({"Task"})
-
+# Maps Claude-style names to OpenAI built-in keys (see `agnos.backends.openai.tools`).
+CLAUDE_TOOL_NAME_TO_OPENAI_NAME: dict[str, str] = {
+    "Read": "read_file",
+    "Write": "apply_patch",
+    "Edit": "apply_patch",
+    "Glob": "glob_files",
+    "Grep": "grep_files",
+    "Bash": "bash",
+}
 # Stable order for the OpenAI Agent ``tools=`` list.
 _ORDER = ("apply_patch", "read_file", "glob_files", "grep_files", "bash")
 
@@ -26,32 +33,19 @@ def make_openai_builtin_tools(
     disallowed_tools: tuple[str, ...] | None,
     confirm_patches: bool,
     confirm_bash: bool,
+    approval_handler_edit: ApprovalHandler | None,
+    approval_handler_execute: ApprovalHandler | None,
 ) -> list[Any] | None:
     """Build OpenAI Agents tools from Claude-style allow/deny lists.
 
-    Returns ``None`` when ``allowed_tools`` is ``None`` (no built-in tools). Raises
-    if ``Task`` is required, or if the effective allow list is empty.
+    Returns ``None`` when ``allowed_tools`` is ``None`` (no built-in tools).
     """
     if allowed_tools is None:
         return None
 
     allowed = set(allowed_tools)
-    denied = set(disallowed_tools or ())
-    effective = allowed - denied
-    if not effective:
-        raise ValueError("allowed_tools is empty after applying disallowed_tools.")
-
-    openai_keys: set[str] = set()
-    for name in effective:
-        if name in _UNSUPPORTED_ON_OPENAI:
-            raise ValueError(
-                f"Tool {name!r} is not supported on the OpenAI backend built-ins "
-                "(use Claude or remove it from allowed_tools)."
-            )
-        key = CLAUDE_TO_OPENAI_BUILTIN.get(name)
-        if key is None:
-            raise ValueError(f"Unknown tool name {name!r} for OpenAI built-ins.")
-        openai_keys.add(key)
+    denied = set[str](disallowed_tools or ())
+    openai_keys = {CLAUDE_TOOL_NAME_TO_OPENAI_NAME[name] for name in allowed - denied}
 
     root = workspace.resolve()
     out: list[Any] = []
@@ -59,7 +53,15 @@ def make_openai_builtin_tools(
         if key not in openai_keys:
             continue
         if key == "apply_patch":
-            out.append(ApplyPatchTool(editor=WorkspaceEditor(root, confirm_patches)))
+            out.append(
+                ApplyPatchTool(
+                    editor=WorkspaceEditor(
+                        root,
+                        confirm_patches,
+                        approval_handler=approval_handler_edit,
+                    )
+                )
+            )
         elif key == "read_file":
             out.append(make_read_file_tool(root))
         elif key == "glob_files":
@@ -67,7 +69,13 @@ def make_openai_builtin_tools(
         elif key == "grep_files":
             out.append(make_grep_files_tool(root))
         elif key == "bash":
-            out.append(make_bash_tool(root, confirm_commands=confirm_bash))
+            out.append(
+                make_bash_tool(
+                    root,
+                    confirm_commands=confirm_bash,
+                    approval_handler=approval_handler_execute,
+                )
+            )
     return out
 
 

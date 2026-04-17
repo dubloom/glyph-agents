@@ -5,27 +5,27 @@ from pathlib import Path
 from agnos import AgentOptions
 from agnos import AgentQueryCompleted
 from agnos import AgentText
+from agnos import AgentToolCall
 from agnos import AgnosClient
 from agnos import PermissionPolicy
 
 
 async def main() -> None:
-    demo_file = Path("examples/tools_permission_demo.txt")
     options = AgentOptions(
-        model=os.getenv("AGNOS_MODEL", "gpt-5.4-mini"),
+        model=os.getenv("AGNOS_MODEL", "gpt-5.4"),
         cwd=Path.cwd(),
-        allowed_tools=("Read", "Glob", "Bash", "Grep", "Write", "Edit"),
-        # disallowed_tools=("Bash",),
-        permission=PermissionPolicy(mode="ask", edit="ask", execute="deny"),
+        allowed_tools=("Read", "Glob", "bASh", "Grep", "Write", "Edit"),
+        permission=PermissionPolicy(edit="ask", execute="allow"),
     )
 
     prompt = (
-        f"Use Write to create `{demo_file}` with one line: "
-        "'created by agnos tools example'. Then use Edit to append a second line: "
-        "'edit step succeeded'. Finally execute a bash command"
+        ("Create a file called hello.py. You must use a shell command to create it. "
+        "Then write a Python hello world in it without using the terminal")
     )
     async with AgnosClient(options) as client:
         async for event in client.query_streamed(prompt):
+            if isinstance(event, AgentToolCall):
+                print(event.name + " " + str(event.arguments))
             if isinstance(event, AgentText):
                 print(event.text, end="")
             elif isinstance(event, AgentQueryCompleted):

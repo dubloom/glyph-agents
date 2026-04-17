@@ -2,10 +2,8 @@ import asyncio
 from collections.abc import AsyncIterable
 from collections.abc import AsyncIterator
 from collections.abc import Iterator
-import json
 import logging
 from pathlib import Path
-import sys
 from typing import Any
 
 from claude_agent_sdk import AssistantMessage as ClaudeAssistantMessage
@@ -19,6 +17,7 @@ from claude_agent_sdk import ToolResultBlock as ClaudeToolResultBlock
 from claude_agent_sdk import ToolUseBlock as ClaudeToolUseBlock
 from claude_agent_sdk import UserMessage
 
+from agnos.approvals import request_tool_approval
 from agnos.messages import AgentEvent
 from agnos.messages import AgentQueryCompleted
 from agnos.messages import AgentText
@@ -26,29 +25,22 @@ from agnos.messages import AgentThinking
 from agnos.messages import AgentToolCall
 from agnos.messages import AgentToolResult
 from agnos.options import AgentOptions
+from agnos.options import ToolCapability
 from agnos.usage import normalize_usage
 
 
-_EDIT_TOOLS = frozenset({"write", "edit", "multiedit"})
+_EDIT_TOOLS = frozenset({"write", "edit"})
 _EXECUTE_TOOLS = frozenset({"bash"})
 _LOGGER = logging.getLogger(__name__)
 
 
-def _tool_capability(tool_name: str) -> str | None:
+def _tool_capability(tool_name: str) -> ToolCapability | None:
     name = tool_name.strip().lower()
     if name in _EDIT_TOOLS:
         return "edit"
     if name in _EXECUTE_TOOLS:
         return "execute"
     return None
-
-
-def _preview_tool_input(payload: dict[str, Any]) -> str:
-    try:
-        text = json.dumps(payload, ensure_ascii=False, default=str)
-    except Exception:
-        text = str(payload)
-    return text if len(text) <= 800 else text[:800] + "..."
 
 
 def _make_pre_tool_use_hooks(options: AgentOptions) -> dict[str, list[ClaudeHookMatcher]] | None:
@@ -73,37 +65,27 @@ def _make_pre_tool_use_hooks(options: AgentOptions) -> dict[str, list[ClaudeHook
         if capability is None:
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
 
-        if not sys.stdin.isatty():
-            return {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        f"{tool_name} requires approval, but no interactive TTY is available."
-                    ),
-                }
-            }
-
-        preview = _preview_tool_input(tool_input_dict)
-        label = tool_name.lower() if tool_name else "tool"
-        print(f"\n[{label}] approval required")
-        if preview:
-            print(preview)
-        answer = await asyncio.to_thread(input, "Proceed? [y/N] ")
-        if answer.strip().lower() in {"y", "yes"}:
+        approved, denied_reason = await asyncio.to_thread(
+            request_tool_approval,
+            handler=options.approval_handler_for(capability),
+            capability=capability,
+            tool_name=tool_name.lower() if tool_name else "tool",
+            payload=tool_input_dict,
+        )
+        if approved:
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
         return {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
-                "permissionDecisionReason": f"{tool_name} denied by user.",
+                "permissionDecisionReason": denied_reason or f"{tool_name} declined.",
             }
         }
 
     return {
         "PreToolUse": [
             ClaudeHookMatcher(
-                matcher="Bash|Write|Edit|MultiEdit",
+                matcher="Bash|Write|Edit",
                 hooks=[_pre_tool_use_hook],
             )
         ]

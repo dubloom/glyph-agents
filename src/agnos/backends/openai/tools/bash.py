@@ -10,6 +10,9 @@ from agents import ShellCommandRequest
 from agents import ShellResult
 from agents import ShellTool
 
+from agnos.approvals import request_tool_approval
+from agnos.options import ApprovalHandler
+
 
 _DEFAULT_TIMEOUT_MS = 120_000
 _MAX_OUTPUT_CHARS = 16_000
@@ -64,15 +67,11 @@ def _commands_from_approval_item(approval_item: Any) -> list[str]:
     return []
 
 
-def _confirm_commands(commands: list[str]) -> bool:
-    print("\n[bash] approval required")
-    for i, command in enumerate(commands, start=1):
-        print(f"{i}. {command}")
-    answer = input("Proceed? [y/N] ").strip().lower()
-    return answer in {"y", "yes"}
-
-
-def make_bash_tool(root: Path, confirm_commands: bool) -> ShellTool:
+def make_bash_tool(
+    root: Path,
+    confirm_commands: bool,
+    approval_handler: ApprovalHandler | None = None,
+) -> ShellTool:
     root = root.resolve()
 
     def _execute(request: ShellCommandRequest) -> ShellResult:
@@ -121,10 +120,15 @@ def make_bash_tool(root: Path, confirm_commands: bool) -> ShellTool:
     ) -> dict[str, Any]:
         del run_context
         commands = _commands_from_approval_item(approval_item)
-        approved = _confirm_commands(commands)
+        approved, denied_reason = request_tool_approval(
+            handler=approval_handler,
+            capability="execute",
+            tool_name="bash",
+            payload={"commands": commands},
+        )
         if approved:
             return {"approve": True}
-        return {"approve": False, "reason": "Command rejected by user"}
+        return {"approve": False, "reason": denied_reason or "Command rejected"}
 
     return ShellTool(
         name="bash",

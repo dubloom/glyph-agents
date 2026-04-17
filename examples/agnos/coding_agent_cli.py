@@ -27,8 +27,8 @@ import argparse
 import asyncio
 import json
 import os
-import sys
 from pathlib import Path
+import sys
 
 from agnos import AgentOptions
 from agnos import AgentQueryCompleted
@@ -39,6 +39,7 @@ from agnos import AgentToolResult
 from agnos import Client
 from agnos import PermissionPolicy
 from agnos import resolve_backend
+
 
 _FILE_TOOLS = ("Read", "Write", "Edit", "Glob", "Grep", "Bash")
 _READ_ONLY_TOOLS = ("Read", "Glob", "Grep")

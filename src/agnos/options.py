@@ -1,19 +1,22 @@
 """Configuration and backend resolution."""
 
+from collections.abc import Callable
 from collections.abc import Sequence
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
+from typing import Any
 from typing import Literal
 
 
 BackendName = Literal["openai", "claude"]
-PermissionLevel = Literal["auto", "ask", "deny"]
+PermissionLevel = Literal["allow", "ask", "deny"]
+ToolCapability = Literal["edit", "execute"]
 OpenAIReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh"]
 OpenAIReasoningSummary = Literal["auto", "concise", "detailed"]
 
 # Claude Agent SDK built-in tool names (canonical casing).
-_KNOWN_CLAUDE_TOOL_NAMES: frozenset[str] = frozenset(
+ACCEPTED_TOOLS: frozenset[str] = frozenset(
     {
         "Read",
         "Write",
@@ -21,54 +24,58 @@ _KNOWN_CLAUDE_TOOL_NAMES: frozenset[str] = frozenset(
         "Glob",
         "Grep",
         "Bash",
-        "Task",
     }
 )
 
-# Maps Claude-style names to OpenAI built-in keys (see `agnos.backends.openai.tools`).
-CLAUDE_TO_OPENAI_BUILTIN: dict[str, str] = {
-    "Read": "read_file",
-    "Write": "apply_patch",
-    "Edit": "apply_patch",
-    "Glob": "glob_files",
-    "Grep": "grep_files",
-    "Bash": "bash",
-}
-
-
-def normalize_claude_tool_name(name: str) -> str:
-    """Return canonical Claude tool name (``Read``, ``Glob``, …) or raise."""
-    if not name or not name.strip():
-        raise ValueError("Tool name must be a non-empty string.")
-    stripped = name.strip()
-    lower = stripped.lower()
-    for canonical in _KNOWN_CLAUDE_TOOL_NAMES:
-        if canonical.lower() == lower:
-            return canonical
-    raise ValueError(
-        f"Unknown tool name {name!r}. "
-        f"Use Claude-style names (e.g. Read, Write, Glob, Grep, Bash, Task)."
-    )
-
-
-def normalize_claude_tool_list(names: Sequence[str] | None) -> tuple[str, ...] | None:
-    if names is None:
+def validate_tool_list(tool_names: Sequence[str] | None) -> tuple[str, ...] | None:
+    if tool_names is None:
         return None
-    return tuple(normalize_claude_tool_name(n) for n in names)
+
+    stripped_tool_names: tuple[str, ...] = ()
+    for tool_name in tool_names:
+        normalized_tool_name = tool_name.strip()
+        if normalized_tool_name not in ACCEPTED_TOOLS:
+            raise ValueError(
+                f"Unknown or unsupported toolname: {tool_name!r}, must be in {ACCEPTED_TOOLS}"
+            )
+        stripped_tool_names = stripped_tool_names + (normalized_tool_name,)
+    return stripped_tool_names
 
 
 @dataclass
 class PermissionPolicy:
     """Vendor-agnostic permission policy for mutable actions."""
 
-    mode: PermissionLevel = "auto"
-    edit: PermissionLevel = "auto"
-    execute: PermissionLevel = "auto"
+    default: PermissionLevel = "ask"
+    edit: PermissionLevel | None = None
+    execute: PermissionLevel | None = None
 
     def resolve(self, capability: Literal["edit", "execute"]) -> PermissionLevel:
         if capability == "edit":
-            return self.mode if self.edit == "auto" else self.edit
-        return self.mode if self.execute == "auto" else self.execute
+            return self.default if self.edit is None else self.edit
+        if capability == "execute":
+            return self.default if self.execute is None else self.execute
+        raise ValueError(f"Unknown capability: {capability!r}")
+
+
+@dataclass(frozen=True)
+class ApprovalRequest:
+    """Vendor-agnostic approval request for a mutable tool action."""
+
+    capability: ToolCapability
+    tool_name: str
+    payload: Any | None = None
+
+
+@dataclass(frozen=True)
+class ApprovalDecision:
+    """Decision returned by an ``approval_handler``."""
+
+    allow: bool
+    reason: str | None = None
+
+
+ApprovalHandler = Callable[[ApprovalRequest], bool | ApprovalDecision]
 
 
 @dataclass
@@ -82,6 +89,8 @@ class AgentOptions:
     allowed_tools: Sequence[str] | None = None
     disallowed_tools: Sequence[str] | None = None
     permission: PermissionPolicy = field(default_factory=PermissionPolicy)
+    approval_handler_edit: ApprovalHandler | None = None
+    approval_handler_execute: ApprovalHandler | None = None
     max_turns: int | None = None
     reasoning_effort: OpenAIReasoningEffort | None = None
     reasoning_summary: OpenAIReasoningSummary | None = None
@@ -90,16 +99,20 @@ class AgentOptions:
         self.model = self.model.strip()
         if not self.model:
             raise ValueError("model must be a non-empty string.")
-        self.allowed_tools = normalize_claude_tool_list(self.allowed_tools)
-        self.disallowed_tools = normalize_claude_tool_list(self.disallowed_tools)
+        self.allowed_tools = validate_tool_list(self.allowed_tools)
+        self.disallowed_tools = validate_tool_list(self.disallowed_tools)
         self._validate_permission(self.permission)
         self._validate_max_turns(self.max_turns)
 
     @staticmethod
     def _validate_permission(policy: PermissionPolicy) -> None:
-        allowed: tuple[PermissionLevel, ...] = ("auto", "ask", "deny")
-        if policy.mode not in allowed or policy.edit not in allowed or policy.execute not in allowed:
-            raise ValueError("permission values must be one of: auto, ask, deny.")
+        allowed: tuple[PermissionLevel, ...] = ("allow", "ask", "deny")
+        if policy.default not in allowed:
+            raise ValueError("permission values must be one of: allow, ask, deny.")
+        if policy.edit is not None and policy.edit not in allowed:
+            raise ValueError("permission values must be one of: allow, ask, deny.")
+        if policy.execute is not None and policy.execute not in allowed:
+            raise ValueError("permission values must be one of: allow, ask, deny.")
 
     @staticmethod
     def _validate_max_turns(max_turns: int | None) -> None:
@@ -129,6 +142,14 @@ class AgentOptions:
             self.permission.resolve("edit") == "ask",
             self.permission.resolve("execute") == "ask",
         )
+
+    def approval_handler_for(self, capability: ToolCapability) -> ApprovalHandler | None:
+        """Return capability-specific approval handler for ``capability``."""
+        if capability == "edit" and self.approval_handler_edit is not None:
+            return self.approval_handler_edit
+        if capability == "execute" and self.approval_handler_execute is not None:
+            return self.approval_handler_execute
+        return None
 
     def claude_permission_mode(self) -> str | None:
         """Return Claude SDK permission mode derived from policy."""

@@ -75,12 +75,14 @@ def _tool_call_started(item: ToolCallItem) -> AgentToolCall:
 
     if not isinstance(name, str) or not name:
         name = raw_type if isinstance(raw_type, str) else None
+
     return AgentToolCall(
         name=name,
         call_id=_get_attr_or_key(raw, "call_id") or _get_attr_or_key(raw, "id"),
         arguments=(
             _get_attr_or_key(raw, "arguments")
             or _get_attr_or_key(raw, "operation")
+            or _get_attr_or_key(raw, "action")
         ),
         tool_type=raw_type if isinstance(raw_type, str) else None,
     )
@@ -171,15 +173,20 @@ class OpenAIBackend:
         self._max_turns = options.max_turns or DEFAULT_MAX_TURNS
         allowed_tools, disallowed_tools = options.effective_tool_lists()
         confirm_patches, confirm_bash = options.openai_confirmations()
+
         tools = make_openai_builtin_tools(
             workspace=options.workspace,
             allowed_tools=allowed_tools,
             disallowed_tools=disallowed_tools,
             confirm_patches=confirm_patches,
             confirm_bash=confirm_bash,
+            approval_handler_edit=options.approval_handler_for("edit"),
+            approval_handler_execute=options.approval_handler_for("execute"),
         )
+
         tools_enabled = bool(tools)
         instructions = _merge_openai_instructions(options, tools_enabled)
+
         agent_kw: dict[str, Any] = {
             "name": options.name,
             "instructions": instructions,
@@ -192,6 +199,7 @@ class OpenAIBackend:
                     summary=options.reasoning_summary or "auto",
                 )
             )
+
         if tools:
             agent_kw["tools"] = tools
         self._agent = Agent(**agent_kw)

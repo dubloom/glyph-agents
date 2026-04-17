@@ -94,10 +94,53 @@ Backend failures are surfaced as `AgentQueryCompleted(is_error=True, ...)`.
 - `instructions`: system prompt / instructions
 - `name`: OpenAI agent display name (default: `"Assistant"`)
 - `cwd`: workspace root for tool access
-- `allowed_tools` / `disallowed_tools`: Claude-style tool names (`Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`, `Task`)
-- `permission`: `PermissionPolicy(mode="auto"|"ask"|"deny", edit=..., execute=...)`
+- `allowed_tools` / `disallowed_tools`: Claude-style tool names (`Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`)
+- `permission`: `PermissionPolicy(default="allow"|"ask"|"deny", edit=..., execute=...)` controls mutable tool permissions.
+  - `default` applies to both capabilities unless overridden.
+  - `edit` overrides only file mutation actions (`Write` / `Edit`).
+  - `execute` overrides only command actions (`Bash`).
+  - Example: `PermissionPolicy(default="deny", edit="ask", execute="allow")` means:
+    file edits need approval, bash is allowed, everything else mutable is denied by default.
+- `approval_handler_edit`: custom approval callback for edit/write actions
+- `approval_handler_execute`: custom approval callback for command execution actions
 - `max_turns`: backend turn cap override
 - `reasoning_effort` / `reasoning_summary`: OpenAI-only reasoning controls
+
+## Approval Handlers (edit vs execute)
+
+When permissions are set to `ask`, Agnos can call capability-specific approval handlers:
+
+- `approval_handler_edit`: used for `Write` / `Edit` style operations
+- `approval_handler_execute`: used for `Bash` style operations
+
+If a handler is missing, Agnos falls back to interactive TTY approval prompts. In non-interactive contexts (server/worker/CI), missing handlers will cause the action to be denied with a clear error message.
+
+```python
+from agnos import AgentOptions, ApprovalDecision, PermissionPolicy
+
+
+def approve_edit(req):
+    # req.capability == "edit"
+    return ApprovalDecision(allow=True)
+
+
+def approve_execute(req):
+    # req.capability == "execute"
+    commands = (req.payload or {}).get("commands", [])
+    allowed = all("rm -rf" not in c for c in commands)
+    return ApprovalDecision(
+        allow=allowed,
+        reason=None if allowed else "Dangerous command blocked",
+    )
+
+
+options = AgentOptions(
+    model="gpt-5.4",
+    permission=PermissionPolicy(edit="ask", execute="ask"),
+    approval_handler_edit=approve_edit,
+    approval_handler_execute=approve_execute,
+)
+```
 
 ## Backend Resolution
 
