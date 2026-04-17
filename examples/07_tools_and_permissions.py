@@ -2,7 +2,7 @@ import asyncio
 import os
 from pathlib import Path
 
-from agnos import AgentOptions
+from agnos import AgentOptions, AgentToolResult
 from agnos import AgentQueryCompleted
 from agnos import AgentText
 from agnos import AgentToolCall
@@ -26,6 +26,8 @@ async def main() -> None:
         async for event in client.query_streamed(prompt):
             if isinstance(event, AgentToolCall):
                 print(event.name + " " + str(event.arguments))
+            if isinstance(event, AgentToolResult):
+                print(event.output)
             if isinstance(event, AgentText):
                 print(event.text, end="")
             elif isinstance(event, AgentQueryCompleted):

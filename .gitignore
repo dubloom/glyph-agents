@@ -5,6 +5,7 @@ __pycache__
 *venv*
 vendor
 build
+dist
 
 .ruff_cache
 .pytest_cache
