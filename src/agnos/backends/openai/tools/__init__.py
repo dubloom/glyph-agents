@@ -33,25 +33,20 @@ _ORDER = ("apply_patch", "read_file", "glob_files", "grep_files", "web_search", 
 def make_openai_builtin_tools(
     *,
     workspace: Path,
-    allowed_tools: tuple[str, ...] | None,
-    disallowed_tools: tuple[str, ...] | None,
+    allowed_tools: tuple[str, ...],
     confirm_patches: bool,
     confirm_bash: bool,
     confirm_web_fetch: bool,
     approval_handler_edit: ApprovalHandler | None,
     approval_handler_execute: ApprovalHandler | None,
     approval_handler_web: ApprovalHandler | None,
-) -> list[Any] | None:
-    """Build OpenAI Agents tools from Claude-style allow/deny lists.
+) -> list[Any]:
+    """Build OpenAI Agents tools from Claude-style allowed tool names.
 
-    Returns ``None`` when ``allowed_tools`` is ``None`` (no built-in tools).
+    Any tool omitted from ``allowed_tools`` is disabled.
     """
-    if allowed_tools is None:
-        return None
-
     allowed = set(allowed_tools)
-    denied = set[str](disallowed_tools or ())
-    openai_keys = {CLAUDE_TOOL_NAME_TO_OPENAI_NAME[name] for name in allowed - denied}
+    openai_keys = {CLAUDE_TOOL_NAME_TO_OPENAI_NAME[name] for name in allowed}
 
     root = workspace.resolve()
     out: list[Any] = []

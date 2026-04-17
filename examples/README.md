@@ -16,7 +16,7 @@ Set your model with `AGNOS_MODEL`. If not provided, each example uses a sensible
 - `04_query_and_receive_response.py`: collect one turn with `query_and_receive_response(...)`
 - `05_receive_messages_multiple_turns.py`: queue multiple turns and drain with `receive_messages(...)`
 - `06_sessions.py`: conversation memory with separate `session_id` values
-- `07_tools_and_permissions.py`: `allowed_tools`, `disallowed_tools`, and `PermissionPolicy`
+- `07_tools_and_permissions.py`: `allowed_tools` activation and `PermissionPolicy(..._ask=True)`
 - `08_openai_reasoning.py`: OpenAI-only reasoning controls
 - `09_resolve_backend.py`: backend auto-resolution helper
 - `10_claude_async_prompt_iterable.py`: Claude-style async iterable prompt input

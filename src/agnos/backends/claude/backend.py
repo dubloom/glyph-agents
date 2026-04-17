@@ -47,9 +47,9 @@ def _tool_capability(tool_name: str) -> ToolCapability | None:
 
 
 def _make_pre_tool_use_hooks(options: AgentOptions) -> dict[str, list[ClaudeHookMatcher]] | None:
-    ask_edit = options.permission.resolve("edit") == "ask"
-    ask_execute = options.permission.resolve("execute") == "ask"
-    ask_web = options.permission.resolve("web") == "ask"
+    ask_edit = options.permission.edit_ask
+    ask_execute = options.permission.execute_ask
+    ask_web = options.permission.web_ask
     if not ask_edit and not ask_execute and not ask_web:
         return None
 
@@ -153,24 +153,19 @@ class ClaudeBackend:
                 "these options are only supported with the OpenAI backend."
             )
 
-        allowed_tools, disallowed_tools = options.effective_tool_lists()
+        allowed_tools = options.effective_allowed_tools()
         permission_mode = options.claude_permission_mode()
         hooks = _make_pre_tool_use_hooks(options)
         claude_kw: dict[str, Any] = {
             "model": options.model,
             "system_prompt": options.instructions,
+            # `tools` is the activation list. Any tool not listed is disabled.
+            "tools": list(allowed_tools),
         }
-        if (
-            options.cwd is not None
-            or allowed_tools is not None
-            or disallowed_tools is not None
-            or permission_mode is not None
-        ):
+        if options.cwd is not None or allowed_tools:
             claude_kw["cwd"] = Path(options.workspace)
-        if allowed_tools is not None:
+        if allowed_tools:
             claude_kw["allowed_tools"] = list(allowed_tools)
-        if disallowed_tools is not None:
-            claude_kw["disallowed_tools"] = list(disallowed_tools)
         if permission_mode is not None:
             claude_kw["permission_mode"] = permission_mode
         if options.max_turns is not None:

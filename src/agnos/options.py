@@ -10,7 +10,6 @@ from typing import Literal
 
 
 BackendName = Literal["openai", "claude"]
-PermissionLevel = Literal["allow", "ask", "deny"]
 ToolCapability = Literal["edit", "execute", "web"]
 OpenAIReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh"]
 OpenAIReasoningSummary = Literal["auto", "concise", "detailed"]
@@ -46,20 +45,24 @@ def validate_tool_list(tool_names: Sequence[str] | None) -> tuple[str, ...] | No
 
 @dataclass
 class PermissionPolicy:
-    """Vendor-agnostic permission policy for mutable actions."""
+    """Approval policy for mutable actions.
 
-    default: PermissionLevel = "ask"
-    edit: PermissionLevel | None = None
-    execute: PermissionLevel | None = None
-    web: PermissionLevel | None = None
+    Set ``*_ask=True`` to require interactive approval (or a custom approval
+    handler) for that capability. Disabled flags are auto-allowed when the
+    corresponding tool is active via ``allowed_tools``.
+    """
 
-    def resolve(self, capability: Literal["edit", "execute", "web"]) -> PermissionLevel:
+    edit_ask: bool = False
+    execute_ask: bool = False
+    web_ask: bool = False
+
+    def requires_approval(self, capability: Literal["edit", "execute", "web"]) -> bool:
         if capability == "edit":
-            return self.default if self.edit is None else self.edit
+            return self.edit_ask
         if capability == "execute":
-            return self.default if self.execute is None else self.execute
+            return self.execute_ask
         if capability == "web":
-            return self.default if self.web is None else self.web
+            return self.web_ask
         raise ValueError(f"Unknown capability: {capability!r}")
 
 
@@ -92,7 +95,6 @@ class AgentOptions:
     name: str = "Assistant"
     cwd: Path | None = None
     allowed_tools: Sequence[str] | None = None
-    disallowed_tools: Sequence[str] | None = None
     permission: PermissionPolicy = field(default_factory=PermissionPolicy)
     approval_handler_edit: ApprovalHandler | None = None
     approval_handler_execute: ApprovalHandler | None = None
@@ -106,21 +108,7 @@ class AgentOptions:
         if not self.model:
             raise ValueError("model must be a non-empty string.")
         self.allowed_tools = validate_tool_list(self.allowed_tools)
-        self.disallowed_tools = validate_tool_list(self.disallowed_tools)
-        self._validate_permission(self.permission)
         self._validate_max_turns(self.max_turns)
-
-    @staticmethod
-    def _validate_permission(policy: PermissionPolicy) -> None:
-        allowed: tuple[PermissionLevel, ...] = ("allow", "ask", "deny")
-        if policy.default not in allowed:
-            raise ValueError("permission values must be one of: allow, ask, deny.")
-        if policy.edit is not None and policy.edit not in allowed:
-            raise ValueError("permission values must be one of: allow, ask, deny.")
-        if policy.execute is not None and policy.execute not in allowed:
-            raise ValueError("permission values must be one of: allow, ask, deny.")
-        if policy.web is not None and policy.web not in allowed:
-            raise ValueError("permission values must be one of: allow, ask, deny.")
 
     @staticmethod
     def _validate_max_turns(max_turns: int | None) -> None:
@@ -133,25 +121,21 @@ class AgentOptions:
     def workspace(self) -> Path:
         return (self.cwd or Path.cwd()).resolve()
 
-    def effective_tool_lists(self) -> tuple[tuple[str, ...] | None, tuple[str, ...] | None]:
-        """Apply permission policy by deny-listing relevant tools."""
-        allowed = self.allowed_tools
-        disallowed_set = set(self.disallowed_tools or ())
-        if self.permission.resolve("edit") == "deny":
-            disallowed_set.update({"Write", "Edit"})
-        if self.permission.resolve("execute") == "deny":
-            disallowed_set.add("Bash")
-        if self.permission.resolve("web") == "deny":
-            disallowed_set.update({"WebSearch", "WebFetch"})
-        disallowed = tuple(sorted(disallowed_set)) if disallowed_set else None
-        return (allowed, disallowed)
+    def effective_allowed_tools(self) -> tuple[str, ...]:
+        """Return tools activated by the allow-list.
+
+        Any tool not present in ``allowed_tools`` is considered disabled.
+        """
+        if self.allowed_tools is None:
+            return ()
+        return tuple(self.allowed_tools)
 
     def openai_confirmations(self) -> tuple[bool, bool, bool]:
         """Return ``(confirm_patches, confirm_bash, confirm_web_fetch)`` for OpenAI tools."""
         return (
-            self.permission.resolve("edit") == "ask",
-            self.permission.resolve("execute") == "ask",
-            self.permission.resolve("web") == "ask",
+            self.permission.edit_ask,
+            self.permission.execute_ask,
+            self.permission.web_ask,
         )
 
     def approval_handler_for(self, capability: ToolCapability) -> ApprovalHandler | None:
@@ -166,10 +150,7 @@ class AgentOptions:
 
     def claude_permission_mode(self) -> str | None:
         """Return Claude SDK permission mode derived from policy."""
-        edit = self.permission.resolve("edit")
-        execute = self.permission.resolve("execute")
-        web = self.permission.resolve("web")
-        if edit == "ask" or execute == "ask" or web == "ask":
+        if self.permission.edit_ask or self.permission.execute_ask or self.permission.web_ask:
             # Force interactive permission prompts instead of inheriting ambient
             # Claude settings (which may auto-approve tool calls).
             return "default"

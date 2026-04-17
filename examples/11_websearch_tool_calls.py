@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from agnos import AgentOptions
+from agnos import AgentOptions, PermissionPolicy
 from agnos import AgentQueryCompleted
 from agnos import AgentText
 from agnos import AgentToolCall
@@ -24,8 +24,8 @@ async def main() -> None:
     options = AgentOptions(
         model=os.getenv("AGNOS_MODEL", "gpt-5.4"),
         cwd=Path.cwd(),
-        allowed_tools=(),
-        disallowed_tools=("WebFetch", "WebSearch")
+        allowed_tools=("WebSearch",),
+        permission=PermissionPolicy(web_ask=True)
     )
 
     prompt = (

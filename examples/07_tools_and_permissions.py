@@ -14,8 +14,8 @@ async def main() -> None:
     options = AgentOptions(
         model=os.getenv("AGNOS_MODEL", "gpt-5.4"),
         cwd=Path.cwd(),
-        allowed_tools=("Read", "Glob", "bASh", "Grep", "Write", "Edit"),
-        permission=PermissionPolicy(edit="ask", execute="allow"),
+        allowed_tools=("Bash", "Read", "Write", "Edit"),
+        permission=PermissionPolicy(edit_ask=True),
     )
 
     prompt = (

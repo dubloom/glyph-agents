@@ -171,13 +171,12 @@ class OpenAIBackend:
     def __init__(self, options: AgentOptions) -> None:
         self._model = options.model
         self._max_turns = options.max_turns or DEFAULT_MAX_TURNS
-        allowed_tools, disallowed_tools = options.effective_tool_lists()
+        allowed_tools = options.effective_allowed_tools()
         confirm_patches, confirm_bash, confirm_web_fetch = options.openai_confirmations()
 
         tools = make_openai_builtin_tools(
             workspace=options.workspace,
             allowed_tools=allowed_tools,
-            disallowed_tools=disallowed_tools,
             confirm_patches=confirm_patches,
             confirm_bash=confirm_bash,
             confirm_web_fetch=confirm_web_fetch,

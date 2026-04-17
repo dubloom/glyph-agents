@@ -25,7 +25,7 @@ async def main() -> None:
     options = AgentOptions(
         model=os.getenv("AGNOS_MODEL", "claude-sonnet-4-5"),
         allowed_tools=("WebFetch",),
-        permission=PermissionPolicy(default="deny", web="ask"),
+        permission=PermissionPolicy(web_ask=True),
     )
 
     prompt = (

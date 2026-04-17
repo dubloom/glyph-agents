@@ -94,14 +94,14 @@ Backend failures are surfaced as `AgentQueryCompleted(is_error=True, ...)`.
 - `instructions`: system prompt / instructions
 - `name`: OpenAI agent display name (default: `"Assistant"`)
 - `cwd`: workspace root for tool access
-- `allowed_tools` / `disallowed_tools`: Claude-style tool names (`Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`, `WebSearch`, `WebFetch`)
-- `permission`: `PermissionPolicy(default="allow"|"ask"|"deny", edit=..., execute=..., web=...)` controls mutable tool permissions.
-  - `default` applies to both capabilities unless overridden.
-  - `edit` overrides only file mutation actions (`Write` / `Edit`).
-  - `execute` overrides only command actions (`Bash`).
-  - `web` overrides web actions (`WebSearch` / `WebFetch`).
-  - Example: `PermissionPolicy(default="deny", edit="ask", execute="allow", web="ask")` means:
-    file edits and web search need approval, bash is allowed, everything else mutable is denied by default.
+- `allowed_tools`: activation allow-list using Claude-style tool names (`Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`, `WebSearch`, `WebFetch`).
+  - Any tool not listed is disabled.
+  - `None`/empty means no built-in tools are activated.
+- `permission`: `PermissionPolicy(edit_ask=True, execute_ask=True, web_ask=True)` enables interactive confirmation per capability.
+  - `edit_ask` applies to file mutation actions (`Write` / `Edit`).
+  - `execute_ask` applies to command actions (`Bash`).
+  - `web_ask` applies to web actions (`WebSearch` / `WebFetch`) (`WebSearch` ask is not supported for OpenAI models).
+  - Flags default to `False`, so capabilities are auto-allowed when the corresponding tool is active.
 - `approval_handler_edit`: custom approval callback for edit/write actions
 - `approval_handler_execute`: custom approval callback for command execution actions
 - `approval_handler_web`: custom approval callback for web actions (`WebSearch` / `WebFetch`)
@@ -139,7 +139,7 @@ def approve_execute(req):
 
 options = AgentOptions(
     model="gpt-5.4",
-    permission=PermissionPolicy(edit="ask", execute="ask", web="ask"),
+    permission=PermissionPolicy(edit_ask=True, execute_ask=True, web_ask=True),
     approval_handler_edit=approve_edit,
     approval_handler_execute=approve_execute,
 )
