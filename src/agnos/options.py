@@ -11,7 +11,7 @@ from typing import Literal
 
 BackendName = Literal["openai", "claude"]
 PermissionLevel = Literal["allow", "ask", "deny"]
-ToolCapability = Literal["edit", "execute"]
+ToolCapability = Literal["edit", "execute", "web"]
 OpenAIReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh"]
 OpenAIReasoningSummary = Literal["auto", "concise", "detailed"]
 
@@ -24,6 +24,8 @@ ACCEPTED_TOOLS: frozenset[str] = frozenset(
         "Glob",
         "Grep",
         "Bash",
+        "WebSearch",
+        "WebFetch",
     }
 )
 
@@ -49,12 +51,15 @@ class PermissionPolicy:
     default: PermissionLevel = "ask"
     edit: PermissionLevel | None = None
     execute: PermissionLevel | None = None
+    web: PermissionLevel | None = None
 
-    def resolve(self, capability: Literal["edit", "execute"]) -> PermissionLevel:
+    def resolve(self, capability: Literal["edit", "execute", "web"]) -> PermissionLevel:
         if capability == "edit":
             return self.default if self.edit is None else self.edit
         if capability == "execute":
             return self.default if self.execute is None else self.execute
+        if capability == "web":
+            return self.default if self.web is None else self.web
         raise ValueError(f"Unknown capability: {capability!r}")
 
 
@@ -91,6 +96,7 @@ class AgentOptions:
     permission: PermissionPolicy = field(default_factory=PermissionPolicy)
     approval_handler_edit: ApprovalHandler | None = None
     approval_handler_execute: ApprovalHandler | None = None
+    approval_handler_web: ApprovalHandler | None = None
     max_turns: int | None = None
     reasoning_effort: OpenAIReasoningEffort | None = None
     reasoning_summary: OpenAIReasoningSummary | None = None
@@ -113,6 +119,8 @@ class AgentOptions:
             raise ValueError("permission values must be one of: allow, ask, deny.")
         if policy.execute is not None and policy.execute not in allowed:
             raise ValueError("permission values must be one of: allow, ask, deny.")
+        if policy.web is not None and policy.web not in allowed:
+            raise ValueError("permission values must be one of: allow, ask, deny.")
 
     @staticmethod
     def _validate_max_turns(max_turns: int | None) -> None:
@@ -133,14 +141,17 @@ class AgentOptions:
             disallowed_set.update({"Write", "Edit"})
         if self.permission.resolve("execute") == "deny":
             disallowed_set.add("Bash")
+        if self.permission.resolve("web") == "deny":
+            disallowed_set.update({"WebSearch", "WebFetch"})
         disallowed = tuple(sorted(disallowed_set)) if disallowed_set else None
         return (allowed, disallowed)
 
-    def openai_confirmations(self) -> tuple[bool, bool]:
-        """Return ``(confirm_patches, confirm_bash)`` for OpenAI tools."""
+    def openai_confirmations(self) -> tuple[bool, bool, bool]:
+        """Return ``(confirm_patches, confirm_bash, confirm_web_fetch)`` for OpenAI tools."""
         return (
             self.permission.resolve("edit") == "ask",
             self.permission.resolve("execute") == "ask",
+            self.permission.resolve("web") == "ask",
         )
 
     def approval_handler_for(self, capability: ToolCapability) -> ApprovalHandler | None:
@@ -149,13 +160,16 @@ class AgentOptions:
             return self.approval_handler_edit
         if capability == "execute" and self.approval_handler_execute is not None:
             return self.approval_handler_execute
+        if capability == "web" and self.approval_handler_web is not None:
+            return self.approval_handler_web
         return None
 
     def claude_permission_mode(self) -> str | None:
         """Return Claude SDK permission mode derived from policy."""
         edit = self.permission.resolve("edit")
         execute = self.permission.resolve("execute")
-        if edit == "ask" or execute == "ask":
+        web = self.permission.resolve("web")
+        if edit == "ask" or execute == "ask" or web == "ask":
             # Force interactive permission prompts instead of inheriting ambient
             # Claude settings (which may auto-approve tool calls).
             return "default"

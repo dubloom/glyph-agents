@@ -20,3 +20,5 @@ Set your model with `AGNOS_MODEL`. If not provided, each example uses a sensible
 - `08_openai_reasoning.py`: OpenAI-only reasoning controls
 - `09_resolve_backend.py`: backend auto-resolution helper
 - `10_claude_async_prompt_iterable.py`: Claude-style async iterable prompt input
+- `11_websearch_tool_calls.py`: WebSearch-enabled prompt with explicit tool call/result logging
+- `12_claude_webfetch_tool_calls.py`: fetch a specific URL via WebFetch and print tool calls/results

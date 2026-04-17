@@ -38,7 +38,8 @@ def request_tool_approval(
             (
                 f"{tool_name} requires approval, but no interactive TTY is available. "
                 "Set AgentOptions.approval_handler_edit or "
-                "AgentOptions.approval_handler_execute "
+                "AgentOptions.approval_handler_execute or "
+                "AgentOptions.approval_handler_web "
                 "for non-interactive environments."
             ),
         )

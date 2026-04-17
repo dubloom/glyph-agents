@@ -31,6 +31,7 @@ from agnos.usage import normalize_usage
 
 _EDIT_TOOLS = frozenset({"write", "edit"})
 _EXECUTE_TOOLS = frozenset({"bash"})
+_WEB_TOOLS = frozenset({"websearch", "webfetch"})
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -40,13 +41,16 @@ def _tool_capability(tool_name: str) -> ToolCapability | None:
         return "edit"
     if name in _EXECUTE_TOOLS:
         return "execute"
+    if name in _WEB_TOOLS:
+        return "web"
     return None
 
 
 def _make_pre_tool_use_hooks(options: AgentOptions) -> dict[str, list[ClaudeHookMatcher]] | None:
     ask_edit = options.permission.resolve("edit") == "ask"
     ask_execute = options.permission.resolve("execute") == "ask"
-    if not ask_edit and not ask_execute:
+    ask_web = options.permission.resolve("web") == "ask"
+    if not ask_edit and not ask_execute and not ask_web:
         return None
 
     async def _pre_tool_use_hook(
@@ -61,6 +65,8 @@ def _make_pre_tool_use_hooks(options: AgentOptions) -> dict[str, list[ClaudeHook
         if capability == "edit" and not ask_edit:
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
         if capability == "execute" and not ask_execute:
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
+        if capability == "web" and not ask_web:
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
         if capability is None:
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
@@ -85,7 +91,7 @@ def _make_pre_tool_use_hooks(options: AgentOptions) -> dict[str, list[ClaudeHook
     return {
         "PreToolUse": [
             ClaudeHookMatcher(
-                matcher="Bash|Write|Edit",
+                matcher="Bash|Write|Edit|WebSearch|WebFetch",
                 hooks=[_pre_tool_use_hook],
             )
         ]

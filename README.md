@@ -94,15 +94,17 @@ Backend failures are surfaced as `AgentQueryCompleted(is_error=True, ...)`.
 - `instructions`: system prompt / instructions
 - `name`: OpenAI agent display name (default: `"Assistant"`)
 - `cwd`: workspace root for tool access
-- `allowed_tools` / `disallowed_tools`: Claude-style tool names (`Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`)
-- `permission`: `PermissionPolicy(default="allow"|"ask"|"deny", edit=..., execute=...)` controls mutable tool permissions.
+- `allowed_tools` / `disallowed_tools`: Claude-style tool names (`Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`, `WebSearch`, `WebFetch`)
+- `permission`: `PermissionPolicy(default="allow"|"ask"|"deny", edit=..., execute=..., web=...)` controls mutable tool permissions.
   - `default` applies to both capabilities unless overridden.
   - `edit` overrides only file mutation actions (`Write` / `Edit`).
   - `execute` overrides only command actions (`Bash`).
-  - Example: `PermissionPolicy(default="deny", edit="ask", execute="allow")` means:
-    file edits need approval, bash is allowed, everything else mutable is denied by default.
+  - `web` overrides web actions (`WebSearch` / `WebFetch`).
+  - Example: `PermissionPolicy(default="deny", edit="ask", execute="allow", web="ask")` means:
+    file edits and web search need approval, bash is allowed, everything else mutable is denied by default.
 - `approval_handler_edit`: custom approval callback for edit/write actions
 - `approval_handler_execute`: custom approval callback for command execution actions
+- `approval_handler_web`: custom approval callback for web actions (`WebSearch` / `WebFetch`)
 - `max_turns`: backend turn cap override
 - `reasoning_effort` / `reasoning_summary`: OpenAI-only reasoning controls
 
@@ -112,6 +114,7 @@ When permissions are set to `ask`, Agnos can call capability-specific approval h
 
 - `approval_handler_edit`: used for `Write` / `Edit` style operations
 - `approval_handler_execute`: used for `Bash` style operations
+- `approval_handler_web`: used for `WebSearch` / `WebFetch` style operations
 
 If a handler is missing, Agnos falls back to interactive TTY approval prompts. In non-interactive contexts (server/worker/CI), missing handlers will cause the action to be denied with a clear error message.
 
@@ -136,7 +139,7 @@ def approve_execute(req):
 
 options = AgentOptions(
     model="gpt-5.4",
-    permission=PermissionPolicy(edit="ask", execute="ask"),
+    permission=PermissionPolicy(edit="ask", execute="ask", web="ask"),
     approval_handler_edit=approve_edit,
     approval_handler_execute=approve_execute,
 )
@@ -171,4 +174,6 @@ python examples/07_tools_and_permissions.py
 python examples/08_openai_reasoning.py
 python examples/09_resolve_backend.py
 python examples/10_claude_async_prompt_iterable.py
+python examples/11_websearch_tool_calls.py
+python examples/12_claude_webfetch_tool_calls.py
 ```

@@ -172,7 +172,7 @@ class OpenAIBackend:
         self._model = options.model
         self._max_turns = options.max_turns or DEFAULT_MAX_TURNS
         allowed_tools, disallowed_tools = options.effective_tool_lists()
-        confirm_patches, confirm_bash = options.openai_confirmations()
+        confirm_patches, confirm_bash, confirm_web_fetch = options.openai_confirmations()
 
         tools = make_openai_builtin_tools(
             workspace=options.workspace,
@@ -180,8 +180,10 @@ class OpenAIBackend:
             disallowed_tools=disallowed_tools,
             confirm_patches=confirm_patches,
             confirm_bash=confirm_bash,
+            confirm_web_fetch=confirm_web_fetch,
             approval_handler_edit=options.approval_handler_for("edit"),
             approval_handler_execute=options.approval_handler_for("execute"),
+            approval_handler_web=options.approval_handler_for("web"),
         )
 
         tools_enabled = bool(tools)
