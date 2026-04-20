@@ -1,16 +1,16 @@
 import asyncio
 import os
 
-from agnos import AgentOptions
-from agnos import AgentQueryCompleted
-from agnos import AgentText
-from agnos import AgnosClient
+from glyph import AgentOptions
+from glyph import AgentQueryCompleted
+from glyph import AgentText
+from glyph import GlyphClient
 
 
 async def main() -> None:
-    options = AgentOptions(model=os.getenv("AGNOS_MODEL", "gpt-4.1-mini"))
+    options = AgentOptions(model=os.getenv("GLYPH_MODEL", "gpt-4.1-mini"))
 
-    async with AgnosClient(options) as client:
+    async with GlyphClient(options) as client:
         events = await client.query_and_receive_response(
             "Name one advantage and one drawback of microservices."
         )

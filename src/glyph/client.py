@@ -2,14 +2,14 @@ from collections.abc import AsyncIterable
 from collections.abc import AsyncIterator
 from typing import Any
 
-from agnos.backends.claude import ClaudeBackend
-from agnos.backends.openai import OpenAIBackend
-from agnos.messages import AgentEvent
-from agnos.options import AgentOptions
-from agnos.options import resolve_backend
+from glyph.backends.claude import ClaudeBackend
+from glyph.backends.openai import OpenAIBackend
+from glyph.messages import AgentEvent
+from glyph.options import AgentOptions
+from glyph.options import resolve_backend
 
 
-class AgnosClient:
+class GlyphClient:
     """Vendor-agnostic client with Claude-style ``query`` / ``receive_response`` flow."""
 
     def __init__(self, options: AgentOptions | None = None) -> None:
@@ -21,7 +21,7 @@ class AgnosClient:
         else:
             self._backend = OpenAIBackend(options)
 
-    async def __aenter__(self) -> "AgnosClient":
+    async def __aenter__(self) -> "GlyphClient":
         await self._backend.connect()
         return self
 

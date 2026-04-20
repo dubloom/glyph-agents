@@ -1,9 +1,9 @@
 import pytest
 
-from agnos import AgentOptions
-from agnos import AgentQueryCompleted
-from agnos import AgentText
-from agnos import query
+from glyph import AgentOptions
+from glyph import AgentQueryCompleted
+from glyph import AgentText
+from glyph import query
 
 
 async def _collect_events(prompt: str, options: AgentOptions) -> list[object]:

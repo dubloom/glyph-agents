@@ -4,10 +4,10 @@ import json
 import sys
 from typing import Any
 
-from agnos.options import ApprovalDecision
-from agnos.options import ApprovalHandler
-from agnos.options import ApprovalRequest
-from agnos.options import ToolCapability
+from glyph.options import ApprovalDecision
+from glyph.options import ApprovalHandler
+from glyph.options import ApprovalRequest
+from glyph.options import ToolCapability
 
 
 def request_tool_approval(

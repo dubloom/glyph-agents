@@ -1,22 +1,22 @@
 import asyncio
 import os
 
-from agnos import AgentOptions
-from agnos import AgentQueryCompleted
-from agnos import AgentText
-from agnos import AgentThinking
-from agnos import AgentToolCall
-from agnos import AgentToolResult
-from agnos import AgnosClient
+from glyph import AgentOptions
+from glyph import AgentQueryCompleted
+from glyph import AgentText
+from glyph import AgentThinking
+from glyph import AgentToolCall
+from glyph import AgentToolResult
+from glyph import GlyphClient
 
 
 async def main() -> None:
     options = AgentOptions(
-        model=os.getenv("AGNOS_MODEL", "gpt-4.1-mini"),
+        model=os.getenv("GLYPH_MODEL", "gpt-4.1-mini"),
         instructions="You are helpful and brief.",
     )
 
-    async with AgnosClient(options) as client:
+    async with GlyphClient(options) as client:
         async for event in client.query_streamed("List two benefits of unit tests."):
             if isinstance(event, AgentThinking):
                 print("[thinking]", event.text)

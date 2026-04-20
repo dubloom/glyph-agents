@@ -6,8 +6,8 @@ from agents import apply_diff
 from agents.editor import ApplyPatchOperation
 from agents.editor import ApplyPatchResult
 
-from agnos.approvals import request_tool_approval
-from agnos.options import ApprovalHandler
+from glyph.approvals import request_tool_approval
+from glyph.options import ApprovalHandler
 
 
 class ApprovalTracker:

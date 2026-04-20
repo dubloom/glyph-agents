@@ -1,11 +1,11 @@
-## agnos
+## glyph
 
 Minimal vendor-agnostic async SDK that normalizes Claude Agent SDK and OpenAI Agents SDK output into one event stream.
 
 ## Install
 
 ```bash
-pip install agnos-agents
+pip install glyph-agents
 # or for local development
 pip install -e .
 ```
@@ -17,7 +17,7 @@ Requires Python `>=3.10`.
 ```python
 import asyncio
 
-from agnos import AgentOptions, AgentQueryCompleted, AgentText, query
+from glyph import AgentOptions, AgentQueryCompleted, AgentText, query
 
 
 async def main() -> None:
@@ -42,9 +42,9 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-## Streaming with `AgnosClient`
+## Streaming with `GlyphClient`
 
-Use `AgnosClient` when you want explicit control of turn lifecycle methods:
+Use `GlyphClient` when you want explicit control of turn lifecycle methods:
 
 - `query(...)` then `receive_response(...)`: send one prompt now, stream that prompt's events right after.
 - `query_streamed(...)`: same behavior as above, but in one call.
@@ -54,13 +54,13 @@ Use `AgnosClient` when you want explicit control of turn lifecycle methods:
 ```python
 import asyncio
 
-from agnos import AgentOptions, AgentQueryCompleted, AgentText, AgentThinking, AgnosClient
+from glyph import AgentOptions, AgentQueryCompleted, AgentText, AgentThinking, GlyphClient
 
 
 async def main() -> None:
     options = AgentOptions(model="gpt-4.1-mini")
 
-    async with AgnosClient(options) as client:
+    async with GlyphClient(options) as client:
         async for event in client.query_streamed("List two benefits of unit tests."):
             if isinstance(event, AgentThinking):
                 print("[thinking]", event.text)
@@ -110,16 +110,16 @@ Backend failures are surfaced as `AgentQueryCompleted(is_error=True, ...)`.
 
 ## Approval Handlers (edit vs execute)
 
-When permissions are set to `ask`, Agnos can call capability-specific approval handlers:
+When permissions are set to `ask`, Glyph can call capability-specific approval handlers:
 
 - `approval_handler_edit`: used for `Write` / `Edit` style operations
 - `approval_handler_execute`: used for `Bash` style operations
 - `approval_handler_web`: used for `WebSearch` / `WebFetch` style operations
 
-If a handler is missing, Agnos falls back to interactive TTY approval prompts. In non-interactive contexts (server/worker/CI), missing handlers will cause the action to be denied with a clear error message.
+If a handler is missing, Glyph falls back to interactive TTY approval prompts. In non-interactive contexts (server/worker/CI), missing handlers will cause the action to be denied with a clear error message.
 
 ```python
-from agnos import AgentOptions, ApprovalDecision, PermissionPolicy
+from glyph import AgentOptions, ApprovalDecision, PermissionPolicy
 
 
 def approve_edit(req):

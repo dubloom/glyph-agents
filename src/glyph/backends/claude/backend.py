@@ -17,16 +17,16 @@ from claude_agent_sdk import ToolResultBlock as ClaudeToolResultBlock
 from claude_agent_sdk import ToolUseBlock as ClaudeToolUseBlock
 from claude_agent_sdk import UserMessage
 
-from agnos.approvals import request_tool_approval
-from agnos.messages import AgentEvent
-from agnos.messages import AgentQueryCompleted
-from agnos.messages import AgentText
-from agnos.messages import AgentThinking
-from agnos.messages import AgentToolCall
-from agnos.messages import AgentToolResult
-from agnos.options import AgentOptions
-from agnos.options import ToolCapability
-from agnos.usage import normalize_usage
+from glyph.approvals import request_tool_approval
+from glyph.messages import AgentEvent
+from glyph.messages import AgentQueryCompleted
+from glyph.messages import AgentText
+from glyph.messages import AgentThinking
+from glyph.messages import AgentToolCall
+from glyph.messages import AgentToolResult
+from glyph.options import AgentOptions
+from glyph.options import ToolCapability
+from glyph.usage import normalize_usage
 
 
 _EDIT_TOOLS = frozenset({"write", "edit"})

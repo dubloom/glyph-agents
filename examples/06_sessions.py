@@ -1,12 +1,12 @@
 import asyncio
 import os
 
-from agnos import AgentOptions
-from agnos import AgentText
-from agnos import AgnosClient
+from glyph import AgentOptions
+from glyph import AgentText
+from glyph import GlyphClient
 
 
-async def ask(client: AgnosClient, session_id: str, prompt: str) -> None:
+async def ask(client: GlyphClient, session_id: str, prompt: str) -> None:
     print(f"\n[{session_id}] user:", prompt)
     async for event in client.query_streamed(prompt, session_id=session_id):
         if isinstance(event, AgentText):
@@ -15,9 +15,9 @@ async def ask(client: AgnosClient, session_id: str, prompt: str) -> None:
 
 
 async def main() -> None:
-    options = AgentOptions(model=os.getenv("AGNOS_MODEL", "gpt-4.1-mini"))
+    options = AgentOptions(model=os.getenv("GLYPH_MODEL", "gpt-4.1-mini"))
 
-    async with AgnosClient(options) as client:
+    async with GlyphClient(options) as client:
         await ask(client, "session-a", "Remember my favorite language is Python.")
         await ask(client, "session-a", "What is my favorite language?")
 

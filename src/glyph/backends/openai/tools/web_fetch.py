@@ -11,13 +11,13 @@ from urllib.request import urlopen
 
 from agents import function_tool
 
-from agnos.approvals import request_tool_approval
-from agnos.options import ApprovalHandler
+from glyph.approvals import request_tool_approval
+from glyph.options import ApprovalHandler
 
 
 _WEB_FETCH_MAX_BYTES = 2 * 1024 * 1024
 _WEB_FETCH_MAX_TEXT_CHARS = 20_000
-_WEB_FETCH_USER_AGENT = "agnos-web-fetch/1.0"
+_WEB_FETCH_USER_AGENT = "glyph-web-fetch/1.0"
 _TEXTUAL_MEDIA_TYPES = {
     "application/json",
     "application/ld+json",

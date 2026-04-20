@@ -6,16 +6,16 @@ from typing import Any
 from agents import ApplyPatchTool
 from agents import WebSearchTool
 
-from agnos.backends.openai.tools.apply_patch import WorkspaceEditor
-from agnos.backends.openai.tools.bash import make_bash_tool
-from agnos.backends.openai.tools.glob import make_glob_files_tool
-from agnos.backends.openai.tools.grep import make_grep_files_tool
-from agnos.backends.openai.tools.read import make_read_file_tool
-from agnos.backends.openai.tools.web_fetch import make_web_fetch_tool
-from agnos.options import ApprovalHandler
+from glyph.backends.openai.tools.apply_patch import WorkspaceEditor
+from glyph.backends.openai.tools.bash import make_bash_tool
+from glyph.backends.openai.tools.glob import make_glob_files_tool
+from glyph.backends.openai.tools.grep import make_grep_files_tool
+from glyph.backends.openai.tools.read import make_read_file_tool
+from glyph.backends.openai.tools.web_fetch import make_web_fetch_tool
+from glyph.options import ApprovalHandler
 
 
-# Maps Claude-style names to OpenAI built-in keys (see `agnos.backends.openai.tools`).
+# Maps Claude-style names to OpenAI built-in keys (see `glyph.backends.openai.tools`).
 CLAUDE_TOOL_NAME_TO_OPENAI_NAME: dict[str, str] = {
     "Read": "read_file",
     "Write": "apply_patch",

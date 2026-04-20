@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 from typing import Protocol
 
-from agnos.messages import AgentEvent
+from glyph.messages import AgentEvent
 
 
 class AgentBackend(Protocol):

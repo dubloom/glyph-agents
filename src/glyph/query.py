@@ -2,9 +2,9 @@ from collections.abc import AsyncIterable
 from collections.abc import AsyncIterator
 from typing import Any
 
-from agnos.client import AgnosClient
-from agnos.messages import AgentEvent
-from agnos.options import AgentOptions
+from glyph.client import GlyphClient
+from glyph.messages import AgentEvent
+from glyph.options import AgentOptions
 
 
 async def query(
@@ -14,6 +14,6 @@ async def query(
     session_id: str = "default",
 ) -> AsyncIterator[AgentEvent]:
     """One-shot helper: send a prompt and stream normalized events."""
-    async with AgnosClient(options) as client:
+    async with GlyphClient(options) as client:
         async for message in client.query_streamed(prompt, session_id=session_id):
             yield message

@@ -1,5 +1,5 @@
-from agnos import AgentOptions
-from agnos import resolve_backend
+from glyph import AgentOptions
+from glyph import resolve_backend
 
 
 def main() -> None:

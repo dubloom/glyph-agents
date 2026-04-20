@@ -1,17 +1,17 @@
 import asyncio
 import os
 
-from agnos import AgentOptions
-from agnos import AgentQueryCompleted
-from agnos import AgentText
-from agnos import AgnosClient
+from glyph import AgentOptions
+from glyph import AgentQueryCompleted
+from glyph import AgentText
+from glyph import GlyphClient
 
 
 async def main() -> None:
-    options = AgentOptions(model=os.getenv("AGNOS_MODEL", "gpt-4.1-mini"))
+    options = AgentOptions(model=os.getenv("GLYPH_MODEL", "gpt-4.1-mini"))
 
     completed_turns = 0
-    async with AgnosClient(options) as client:
+    async with GlyphClient(options) as client:
         await client.query("Say 'first turn done'.")
         await client.query("Say 'second turn done'.")
         async for event in client.receive_messages():

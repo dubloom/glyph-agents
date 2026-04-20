@@ -3,13 +3,13 @@ import json
 import os
 from typing import Any
 
-from agnos import AgentOptions
-from agnos import AgentQueryCompleted
-from agnos import AgentText
-from agnos import AgentToolCall
-from agnos import AgentToolResult
-from agnos import AgnosClient
-from agnos import PermissionPolicy
+from glyph import AgentOptions
+from glyph import AgentQueryCompleted
+from glyph import AgentText
+from glyph import AgentToolCall
+from glyph import AgentToolResult
+from glyph import GlyphClient
+from glyph import PermissionPolicy
 
 
 def _format_value(value: Any) -> str:
@@ -23,7 +23,7 @@ def _format_value(value: Any) -> str:
 async def main() -> None:
     target_url = os.getenv("AGNOS_FETCH_URL", "https://www.python.org/")
     options = AgentOptions(
-        model=os.getenv("AGNOS_MODEL", "claude-sonnet-4-5"),
+        model=os.getenv("GLYPH_MODEL", "claude-sonnet-4-5"),
         allowed_tools=("WebFetch",),
         permission=PermissionPolicy(web_ask=True),
     )
@@ -37,7 +37,7 @@ async def main() -> None:
         "- The final URL you fetched"
     )
 
-    async with AgnosClient(options) as client:
+    async with GlyphClient(options) as client:
         async for event in client.query_streamed(prompt):
             if isinstance(event, AgentToolCall):
                 print("\n[TOOL CALL]")

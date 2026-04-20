@@ -10,8 +10,8 @@ from agents import ShellCommandRequest
 from agents import ShellResult
 from agents import ShellTool
 
-from agnos.approvals import request_tool_approval
-from agnos.options import ApprovalHandler
+from glyph.approvals import request_tool_approval
+from glyph.options import ApprovalHandler
 
 
 _DEFAULT_TIMEOUT_MS = 120_000

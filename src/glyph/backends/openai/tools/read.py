@@ -5,7 +5,7 @@ from typing import Annotated
 
 from agents import function_tool
 
-from agnos.backends.openai.tools.utils import resolve_under_root
+from glyph.backends.openai.tools.utils import resolve_under_root
 
 
 _READ_MAX_BYTES = 512 * 1024

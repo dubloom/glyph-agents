@@ -2,9 +2,9 @@ import asyncio
 from collections.abc import AsyncIterator
 import os
 
-from agnos import AgentOptions
-from agnos import AgentText
-from agnos import AgnosClient
+from glyph import AgentOptions
+from glyph import AgentText
+from glyph import GlyphClient
 
 
 async def prompt_stream() -> AsyncIterator[dict[str, str]]:
@@ -14,10 +14,10 @@ async def prompt_stream() -> AsyncIterator[dict[str, str]]:
 
 async def main() -> None:
     options = AgentOptions(
-        model=os.getenv("AGNOS_MODEL", "claude-haiku-4-5"),
+        model=os.getenv("GLYPH_MODEL", "claude-haiku-4-5"),
         instructions="Be concise.",
     )
-    async with AgnosClient(options) as client:
+    async with GlyphClient(options) as client:
         await client.query(prompt_stream())
         async for event in client.receive_response():
             if isinstance(event, AgentText):

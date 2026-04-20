@@ -2,17 +2,17 @@ import asyncio
 import os
 from pathlib import Path
 
-from agnos import AgentOptions, AgentToolResult
-from agnos import AgentQueryCompleted
-from agnos import AgentText
-from agnos import AgentToolCall
-from agnos import AgnosClient
-from agnos import PermissionPolicy
+from glyph import AgentOptions, AgentToolResult
+from glyph import AgentQueryCompleted
+from glyph import AgentText
+from glyph import AgentToolCall
+from glyph import GlyphClient
+from glyph import PermissionPolicy
 
 
 async def main() -> None:
     options = AgentOptions(
-        model=os.getenv("AGNOS_MODEL", "gpt-5.4"),
+        model=os.getenv("GLYPH_MODEL", "gpt-5.4"),
         cwd=Path.cwd(),
         allowed_tools=("Bash", "Read", "Write", "Edit"),
         permission=PermissionPolicy(edit_ask=True),
@@ -22,7 +22,7 @@ async def main() -> None:
         ("Create a file called hello.py. You must use a shell command to create it. "
         "Then write a Python hello world in it without using the terminal")
     )
-    async with AgnosClient(options) as client:
+    async with GlyphClient(options) as client:
         async for event in client.query_streamed(prompt):
             if isinstance(event, AgentToolCall):
                 print(event.name + " " + str(event.arguments))

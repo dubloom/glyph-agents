@@ -4,12 +4,12 @@ import os
 from pathlib import Path
 from typing import Any
 
-from agnos import AgentOptions, PermissionPolicy
-from agnos import AgentQueryCompleted
-from agnos import AgentText
-from agnos import AgentToolCall
-from agnos import AgentToolResult
-from agnos import AgnosClient
+from glyph import AgentOptions, PermissionPolicy
+from glyph import AgentQueryCompleted
+from glyph import AgentText
+from glyph import AgentToolCall
+from glyph import AgentToolResult
+from glyph import GlyphClient
 
 
 def _format_value(value: Any) -> str:
@@ -22,7 +22,7 @@ def _format_value(value: Any) -> str:
 
 async def main() -> None:
     options = AgentOptions(
-        model=os.getenv("AGNOS_MODEL", "gpt-5.4"),
+        model=os.getenv("GLYPH_MODEL", "gpt-5.4"),
         cwd=Path.cwd(),
         allowed_tools=("WebSearch",),
         permission=PermissionPolicy(web_ask=True)
@@ -34,7 +34,7 @@ async def main() -> None:
         "Return two concise bullet points and include source URLs."
     )
 
-    async with AgnosClient(options) as client:
+    async with GlyphClient(options) as client:
         async for event in client.query_streamed(prompt):
             if isinstance(event, AgentToolCall):
                 print("\n[TOOL CALL]")

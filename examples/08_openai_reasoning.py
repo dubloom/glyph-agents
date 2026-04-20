@@ -1,21 +1,21 @@
 import asyncio
 import os
 
-from agnos import AgentOptions
-from agnos import AgentQueryCompleted
-from agnos import AgentText
-from agnos import AgnosClient
+from glyph import AgentOptions
+from glyph import AgentQueryCompleted
+from glyph import AgentText
+from glyph import GlyphClient
 
 
 async def main() -> None:
     options = AgentOptions(
-        model=os.getenv("AGNOS_MODEL", "gpt-5.4-mini"),
+        model=os.getenv("GLYPH_MODEL", "gpt-5.4-mini"),
         reasoning_effort="low",
         reasoning_summary="summary",
         instructions="Answer in at most three bullet points.",
     )
 
-    async with AgnosClient(options) as client:
+    async with GlyphClient(options) as client:
         async for event in client.query_streamed(
             "How can I reduce Python cold-start time in serverless apps?"
         ):
