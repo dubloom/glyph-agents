@@ -199,6 +199,7 @@ Workflow notes:
 - `@step(prompt=..., model=...)` marks an LLM step; `model` can override the default model for that step.
 - In LLM steps, use `yield` to execute the query, then optionally process `AgentQueryCompleted` after the yield.
 - Use `self.fill_prompt(...)` to render prompt templates safely while preserving missing placeholders.
+- Use `self.next_step(self.some_step, value)` to jump to another step and provide that step's input explicitly.
 - `GlyphWorkflow.run(options=..., initial_input=..., session_id=...)` supports runtime overrides and first-step input injection.
 
 ## Examples

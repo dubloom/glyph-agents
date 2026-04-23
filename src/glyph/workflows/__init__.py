@@ -34,6 +34,15 @@ class _StopWorkflow(Exception):
         self.value = value
 
 
+class _NextWorkflowStep(Exception):
+    """Internal signal used to jump to a specific workflow step."""
+
+    def __init__(self, step_name: str, value: Any) -> None:
+        super().__init__(f"Workflow jumped to step {step_name!r}.")
+        self.step_name = step_name
+        self.value = value
+
+
 class GlyphWorkflow:
     """Run decorated steps sequentially and pass each result to the next step."""
 
@@ -59,6 +68,13 @@ class GlyphWorkflow:
     def stop_workflow(self, value: Any) -> None:
         """Stop the workflow immediately and make ``run()`` return ``value``."""
         raise _StopWorkflow(value)
+
+    def next_step(self, step_func: Callable[..., Any], value: Any) -> None:
+        """Jump to ``step_func`` and pass ``value`` as that step's input."""
+        descriptor = getattr(step_func, "_glyph_step", None)
+        if descriptor is None:
+            raise TypeError("next_step expects a bound @step method, e.g. self.some_step.")
+        raise _NextWorkflowStep(step_func.__name__, value)
 
     @classmethod
     async def run(
@@ -89,6 +105,7 @@ class GlyphWorkflow:
             return None
 
         has_llm_steps = any(descriptor.kind == "llm" for descriptor in descriptors)
+        step_indexes = {descriptor.func.__name__: index for index, descriptor in enumerate(descriptors)}
 
         # Keep context when overriding model per step.
         session_id = str(uuid.uuid4()) if session_id is None else session_id.strip()
@@ -98,33 +115,52 @@ class GlyphWorkflow:
         result: Any = initial_input
         shared_client = None
 
+        async def _run_descriptor(descriptor: StepDescriptor, previous_result: Any) -> Any:
+            if descriptor.kind == "llm":
+                if shared_client is None:
+                    raise RuntimeError("LLM step requires an initialized GlyphClient.")
+                return await self._run_llm_step(
+                    descriptor=descriptor,
+                    previous_result=previous_result,
+                    session_id=session_id,
+                    shared_client=shared_client,
+                )
+            return await self._run_python_step(descriptor, previous_result)
+
+        async def _run_all_steps() -> Any:
+            nonlocal result
+            step_index = 0
+            while step_index < len(descriptors):
+                descriptor = descriptors[step_index]
+                try:
+                    result = await _run_descriptor(descriptor, result)
+                    step_index += 1
+                except _NextWorkflowStep as next_step:
+                    try:
+                        step_index = step_indexes[next_step.step_name]
+                    except KeyError as error:
+                        raise ValueError(
+                            f"Unknown workflow step {next_step.step_name!r}. "
+                            "Pass a declared bound @step method from this workflow instance."
+                        ) from error
+                    result = next_step.value
+            return result
+
         # we create a client for all the steps to keep context
         # however a workflow could be python only so if there is no
         # llm step, we don't create a client
         if has_llm_steps:
             async with GlyphClient(self.default_options) as shared_client:
                 try:
-                    for descriptor in descriptors:
-                        if descriptor.kind == "llm":
-                            result = await self._run_llm_step(
-                                descriptor=descriptor,
-                                previous_result=result,
-                                session_id=session_id,
-                                shared_client=shared_client,
-                            )
-                        else:
-                            result = await self._run_python_step(descriptor, result)
+                    return await _run_all_steps()
                 except _StopWorkflow as stop:
                     return stop.value
-            return result
 
+        # this run when we have a python only worfklow
         try:
-            for descriptor in descriptors:
-                result = await self._run_python_step(descriptor, result)
+            return await _run_all_steps()
         except _StopWorkflow as stop:
             return stop.value
-
-        return result
 
     async def _run_python_step(
         self,
