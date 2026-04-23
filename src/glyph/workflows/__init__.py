@@ -26,6 +26,14 @@ def fill_prompt(template: str, **values: Any) -> str:
     return template.format_map(_PromptTemplateValues(values))
 
 
+class _StopWorkflow(Exception):
+    """Internal signal used to end a workflow early with a custom return value."""
+
+    def __init__(self, value: Any) -> None:
+        super().__init__("Workflow stopped early.")
+        self.value = value
+
+
 class GlyphWorkflow:
     """Run decorated steps sequentially and pass each result to the next step."""
 
@@ -47,6 +55,10 @@ class GlyphWorkflow:
         """Render and update ``self.prompt`` using keyword values."""
         self.prompt = fill_prompt(self.prompt, **values)
         return self.prompt
+
+    def stop_workflow(self, value: Any) -> None:
+        """Stop the workflow immediately and make ``run()`` return ``value``."""
+        raise _StopWorkflow(value)
 
     @classmethod
     async def run(
@@ -91,20 +103,27 @@ class GlyphWorkflow:
         # llm step, we don't create a client
         if has_llm_steps:
             async with GlyphClient(self.default_options) as shared_client:
-                for descriptor in descriptors:
-                    if descriptor.kind == "llm":
-                        result = await self._run_llm_step(
-                            descriptor=descriptor,
-                            previous_result=result,
-                            session_id=session_id,
-                            shared_client=shared_client,
-                        )
-                    else:
-                        result = await self._run_python_step(descriptor, result)
+                try:
+                    for descriptor in descriptors:
+                        if descriptor.kind == "llm":
+                            result = await self._run_llm_step(
+                                descriptor=descriptor,
+                                previous_result=result,
+                                session_id=session_id,
+                                shared_client=shared_client,
+                            )
+                        else:
+                            result = await self._run_python_step(descriptor, result)
+                except _StopWorkflow as stop:
+                    return stop.value
             return result
 
-        for descriptor in descriptors:
-            result = await self._run_python_step(descriptor, result)
+        try:
+            for descriptor in descriptors:
+                result = await self._run_python_step(descriptor, result)
+        except _StopWorkflow as stop:
+            return stop.value
+
         return result
 
     async def _run_python_step(
