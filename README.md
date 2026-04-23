@@ -34,11 +34,24 @@ options:
 Write a warm postcard from Lisbon in 3 sentences max.
 ```
 
+Execute steps can also be inferred from standalone Python fences, so you can keep everything in one `workflow.md`:
+
+````md
+## Step: loadTripContext
+
+```python
+return {"city": "Lisbon"}
+```
+
+returns:
+  city: str
+````
+
 ```bash
 glyph workflow.md
 ```
 
-The full runnable example lives in `examples/17_workflow_markdown/workflow.md`.
+The full runnable examples live in `examples/17_workflow_markdown/workflow.md` and `examples/18_workflow_mardown_python/workflow.md`.
 
 ## Quickstart (`query` helper)
 

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import importlib.util
 import inspect
-import re
-from dataclasses import dataclass
 from pathlib import Path
+import re
+import textwrap
 from typing import Any
 from typing import Literal
 
@@ -21,6 +22,7 @@ _STEP_HEADING_RE = re.compile(r"^## Step:\s*(?P<step_id>.+?)\s*$", re.MULTILINE)
 _COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _PROMPT_VARIABLE_RE = re.compile(r"{{\s*([A-Za-z_][A-Za-z0-9_]*)\s*}}")
 _METADATA_LINE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\s*:")
+_SUPPORTED_STEP_METADATA_KEYS = {"execute", "model", "returns", "stop"}
 
 _SCALAR_TYPES: dict[str, type[Any]] = {
     "str": str,
@@ -40,6 +42,7 @@ class MarkdownStep:
     step_id: str
     kind: MarkdownStepKind
     execute: str | None
+    execute_is_inline: bool
     prompt: str | None
     model: str | None
     stop: str | None
@@ -172,8 +175,14 @@ def _parse_steps(body: str) -> list[MarkdownStep]:
 
 
 def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
-    metadata_lines, prompt = _split_step_metadata(section)
-    metadata = _parse_mapping_block(metadata_lines, context=f"step {step_id!r}")
+    inline_execute = _parse_inline_execute_section(step_id, section)
+    if inline_execute is not None:
+        metadata, inline_execute_source = inline_execute
+        prompt = ""
+    else:
+        metadata_lines, prompt = _split_step_metadata(section)
+        metadata = _parse_mapping_block(metadata_lines, context=f"step {step_id!r}")
+        inline_execute_source = None
 
     execute = metadata.pop("execute", None)
     model = metadata.pop("model", None)
@@ -189,7 +198,13 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
         raise ValueError(f"Prompt-only step {step_id!r} must not declare `is_streaming` in v1.")
 
     if stop is not None:
-        if execute is not None or model is not None or returns is not None or prompt:
+        if (
+            execute is not None
+            or inline_execute_source is not None
+            or model is not None
+            or returns is not None
+            or prompt
+        ):
             raise ValueError(f"Stop step {step_id!r} cannot declare `execute`, `model`, `returns`, or prompt text.")
         if not isinstance(stop, str) or not stop.strip():
             raise ValueError(f"Stop step {step_id!r} must declare a non-empty `stop:` value.")
@@ -197,18 +212,26 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
             step_id=step_id,
             kind="stop",
             execute=None,
+            execute_is_inline=False,
             prompt=None,
             model=None,
             stop=stop.strip(),
             returns=None,
         )
 
+    if inline_execute_source is not None:
+        if execute is not None:
+            raise ValueError(f"Step {step_id!r} cannot declare both `execute:` and an inline Python block.")
+        execute = inline_execute_source
+
     if execute is not None and prompt:
         raise ValueError(f"Step {step_id!r} cannot declare both `execute:` and prompt text in v1.")
 
     if execute is not None:
         if not isinstance(execute, str) or not execute.strip():
-            raise ValueError(f"Execute step {step_id!r} must declare a non-empty `execute:` target.")
+            raise ValueError(
+                f"Execute step {step_id!r} must declare a non-empty `execute:` target or inline Python block."
+            )
         if model is not None:
             raise ValueError(f"Execute step {step_id!r} must not declare `model:`.")
         normalized_returns = _normalize_returns(step_id=step_id, returns=returns)
@@ -216,6 +239,7 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
             step_id=step_id,
             kind="execute",
             execute=execute.strip(),
+            execute_is_inline=inline_execute_source is not None,
             prompt=None,
             model=None,
             stop=None,
@@ -233,6 +257,7 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
         step_id=step_id,
         kind="llm",
         execute=None,
+        execute_is_inline=False,
         prompt=prompt,
         model=model.strip() if isinstance(model, str) else None,
         stop=None,
@@ -242,28 +267,81 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
 
 def _split_step_metadata(section: str) -> tuple[list[str], str]:
     lines = section.splitlines()
-    metadata_lines: list[str] = []
-    body_start = 0
-    saw_metadata = False
-    supported_metadata_keys = {"execute", "model", "returns", "stop"}
+    metadata_lines, body_start = _consume_step_metadata(
+        lines,
+        start=0,
+        supported_metadata_keys=_SUPPORTED_STEP_METADATA_KEYS,
+    )
 
-    while body_start < len(lines):
-        line = lines[body_start]
+    prompt = "\n".join(lines[body_start:]).strip()
+    return metadata_lines, prompt
+
+
+def _parse_inline_execute_section(step_id: str, section: str) -> tuple[dict[str, Any], str] | None:
+    lines = section.splitlines()
+    leading_metadata_lines, index = _consume_step_metadata(
+        lines,
+        start=0,
+        supported_metadata_keys=_SUPPORTED_STEP_METADATA_KEYS,
+    )
+    if index >= len(lines) or lines[index].strip() != "```python":
+        return None
+
+    fence_end = _find_fence_end(lines, start=index + 1)
+    if fence_end is None:
+        raise ValueError(f"Inline Python step {step_id!r} must close its fenced code block with ```.")
+
+    trailing_metadata_lines, trailing_index = _consume_step_metadata(
+        lines,
+        start=fence_end + 1,
+        supported_metadata_keys=_SUPPORTED_STEP_METADATA_KEYS,
+    )
+    if any(line.strip() for line in lines[trailing_index:]):
+        return None
+
+    leading_metadata = _parse_mapping_block(leading_metadata_lines, context=f"step {step_id!r}")
+    trailing_metadata = _parse_mapping_block(trailing_metadata_lines, context=f"step {step_id!r}")
+    duplicate_keys = set(leading_metadata) & set(trailing_metadata)
+    if duplicate_keys:
+        duplicates = ", ".join(sorted(duplicate_keys))
+        raise ValueError(f"Duplicate metadata key(s) on step {step_id!r}: {duplicates}.")
+
+    inline_source = textwrap.dedent("\n".join(lines[index + 1 : fence_end])).strip("\n")
+    if not inline_source.strip():
+        raise ValueError(f"Inline Python step {step_id!r} must contain code inside the fenced block.")
+
+    return {**leading_metadata, **trailing_metadata}, inline_source
+
+
+def _consume_step_metadata(
+    lines: list[str],
+    *,
+    start: int,
+    supported_metadata_keys: set[str],
+) -> tuple[list[str], int]:
+    metadata_lines: list[str] = []
+    index = start
+    saw_metadata = False
+
+    while index < len(lines):
+        line = lines[index]
         stripped = line.strip()
         if not stripped:
             if saw_metadata:
-                body_start += 1
-                while body_start < len(lines) and not lines[body_start].strip():
-                    body_start += 1
+                index += 1
+                while index < len(lines) and not lines[index].strip():
+                    index += 1
                 break
-            body_start += 1
+            index += 1
             continue
+        if stripped.startswith("```"):
+            break
         if line.startswith((" ", "\t")):
             if not metadata_lines:
                 break
             metadata_lines.append(line)
             saw_metadata = True
-            body_start += 1
+            index += 1
             continue
         if _METADATA_LINE_RE.match(line):
             key, _separator, _value = line.partition(":")
@@ -271,12 +349,18 @@ def _split_step_metadata(section: str) -> tuple[list[str], str]:
                 break
             metadata_lines.append(line)
             saw_metadata = True
-            body_start += 1
+            index += 1
             continue
         break
 
-    prompt = "\n".join(lines[body_start:]).strip()
-    return metadata_lines, prompt
+    return metadata_lines, index
+
+
+def _find_fence_end(lines: list[str], *, start: int) -> int | None:
+    for index in range(start, len(lines)):
+        if lines[index].strip() == "```":
+            return index
+    return None
 
 
 def _parse_mapping_block(lines: list[str], *, context: str) -> dict[str, Any]:
@@ -388,7 +472,9 @@ def _normalize_returns(*, step_id: str, returns: Any) -> str | dict[str, str] | 
             _validate_type_name(value, step_id=step_id)
             normalized[key] = value
         return normalized
-    raise ValueError(f"Step {step_id!r} `returns` must be a scalar alias or a mapping of field names to scalar aliases.")
+    raise ValueError(
+        f"Step {step_id!r} `returns` must be a scalar alias or a mapping of field names to scalar aliases."
+    )
 
 
 def _validate_type_name(type_name: str, *, step_id: str) -> None:
@@ -447,7 +533,14 @@ def _build_step_method(
     method_name: str,
 ):
     if step_definition.kind == "execute":
-        handler = _load_execute_handler(step_definition.execute or "", workflow_path.parent)
+        if step_definition.execute_is_inline:
+            handler = _load_inline_execute_handler(
+                step_definition.execute or "",
+                workflow_path=workflow_path,
+                step_id=step_definition.step_id,
+            )
+        else:
+            handler = _load_execute_handler(step_definition.execute or "", workflow_path.parent)
 
         async def _execute_step(self, previous_result: Any = None) -> Any:
             result = await _invoke_execute_handler(handler, previous_result)
@@ -531,6 +624,20 @@ def _load_execute_handler(target: str, base_directory: Path):
     if handler is None:
         raise AttributeError(f"{script_path} does not define {function_name!r}.")
     return handler
+
+
+def _load_inline_execute_handler(source: str, *, workflow_path: Path, step_id: str):
+    function_name = _step_method_name(0, f"inline_{step_id}")
+    function_source = (
+        f"async def {function_name}(previous_result=None):\n"
+        f"{textwrap.indent(source, '    ')}\n"
+    )
+    namespace = {
+        "__file__": str(workflow_path),
+        "__name__": f"_glyph_markdown_inline_{abs(hash((str(workflow_path), step_id)))}",
+    }
+    exec(compile(function_source, str(workflow_path), "exec"), namespace)
+    return namespace[function_name]
 
 
 async def _invoke_execute_handler(handler: Any, previous_result: Any) -> Any:
