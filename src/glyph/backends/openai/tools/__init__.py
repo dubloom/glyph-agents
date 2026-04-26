@@ -40,6 +40,7 @@ def make_openai_builtin_tools(
     approval_handler_edit: ApprovalHandler | None,
     approval_handler_execute: ApprovalHandler | None,
     approval_handler_web: ApprovalHandler | None,
+    bash_timeout_ms: int | None = None,
 ) -> list[Any]:
     """Build OpenAI Agents tools from Claude-style allowed tool names.
 
@@ -83,6 +84,7 @@ def make_openai_builtin_tools(
                 make_bash_tool(
                     root,
                     confirm_commands=confirm_bash,
+                    default_timeout_ms=bash_timeout_ms,
                     approval_handler=approval_handler_execute,
                 )
             )

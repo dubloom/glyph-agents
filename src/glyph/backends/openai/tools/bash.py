@@ -70,13 +70,15 @@ def _commands_from_approval_item(approval_item: Any) -> list[str]:
 def make_bash_tool(
     root: Path,
     confirm_commands: bool,
+    default_timeout_ms: int | None = None,
     approval_handler: ApprovalHandler | None = None,
 ) -> ShellTool:
     root = root.resolve()
+    effective_default_timeout_ms = default_timeout_ms or _DEFAULT_TIMEOUT_MS
 
     def _execute(request: ShellCommandRequest) -> ShellResult:
         action = request.data.action
-        timeout_s = _normalize_timeout(action.timeout_ms)
+        timeout_s = _normalize_timeout(action.timeout_ms or effective_default_timeout_ms)
         max_output = _normalize_max_output(action.max_output_length)
         outputs: list[ShellCommandOutput] = []
 

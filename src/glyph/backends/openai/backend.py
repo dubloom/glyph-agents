@@ -103,7 +103,7 @@ def _tool_call_completed(item: ToolCallOutputItem) -> AgentToolResult:
 
 def _openai_tool_guidance_instructions() -> str:
     return (
-        "Use glob_files and grep_files to locate content, read_file to inspect files. "
+        "Use glob_files and grep_files to locate content, then read_file with offset/limit to inspect targeted ranges. "
         "To create, update, or delete files, use the apply_patch tool only. "
         "Never claim files were changed unless apply_patch succeeded. "
         "Prefer minimal, correct patches."
@@ -183,6 +183,7 @@ class OpenAIBackend:
             approval_handler_edit=options.approval_handler_for("edit"),
             approval_handler_execute=options.approval_handler_for("execute"),
             approval_handler_web=options.approval_handler_for("web"),
+            bash_timeout_ms=options.bash_timeout_ms,
         )
 
         tools_enabled = bool(tools)
@@ -193,13 +194,14 @@ class OpenAIBackend:
             "instructions": instructions,
             "model": options.model,
         }
+        model_settings_kwargs: dict[str, Any] = {}
         if options.reasoning_effort is not None:
-            agent_kw["model_settings"] = ModelSettings(
-                reasoning=Reasoning(
-                    effort=options.reasoning_effort or "low",
-                    summary=options.reasoning_summary or "auto",
-                )
-            )
+            reasoning_kwargs: dict[str, Any] = {"effort": options.reasoning_effort or "low"}
+            if options.reasoning_summary is not None:
+                reasoning_kwargs["summary"] = options.reasoning_summary
+            model_settings_kwargs["reasoning"] = Reasoning(**reasoning_kwargs)
+        if model_settings_kwargs:
+            agent_kw["model_settings"] = ModelSettings(**model_settings_kwargs)
 
         if tools:
             agent_kw["tools"] = tools

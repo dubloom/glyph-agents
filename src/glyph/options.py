@@ -100,6 +100,7 @@ class AgentOptions:
     approval_handler_execute: ApprovalHandler | None = None
     approval_handler_web: ApprovalHandler | None = None
     max_turns: int | None = None
+    bash_timeout_ms: int | None = None
     reasoning_effort: OpenAIReasoningEffort | None = None
     reasoning_summary: OpenAIReasoningSummary | None = None
 
@@ -109,6 +110,7 @@ class AgentOptions:
             raise ValueError("model must be a non-empty string.")
         self.allowed_tools = validate_tool_list(self.allowed_tools)
         self._validate_max_turns(self.max_turns)
+        self._validate_positive_int(self.bash_timeout_ms, "bash_timeout_ms")
 
     @staticmethod
     def _validate_max_turns(max_turns: int | None) -> None:
@@ -116,6 +118,13 @@ class AgentOptions:
             return
         if not isinstance(max_turns, int) or max_turns <= 0:
             raise ValueError("max_turns must be a positive integer when provided.")
+
+    @staticmethod
+    def _validate_positive_int(value: int | None, name: str) -> None:
+        if value is None:
+            return
+        if not isinstance(value, int) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer when provided.")
 
     @property
     def workspace(self) -> Path:

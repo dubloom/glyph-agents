@@ -147,6 +147,7 @@ Backend failures are surfaced as `AgentQueryCompleted(is_error=True, ...)`.
 - `approval_handler_execute`: custom approval callback for command execution actions
 - `approval_handler_web`: custom approval callback for web actions (`WebSearch` / `WebFetch`)
 - `max_turns`: backend turn cap override
+- `bash_timeout_ms`: OpenAI Bash tool default timeout override
 - `reasoning_effort` / `reasoning_summary`: OpenAI-only reasoning controls
 
 ## Approval Handlers (edit vs execute)
