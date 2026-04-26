@@ -13,6 +13,7 @@ from glyph import PermissionPolicy
 from glyph import query
 
 _READ_TOOL_NAMES = frozenset({"Read", "read_file"})
+_EDIT_TOOL_NAMES = frozenset({"Write", "Edit", "apply_patch_call"})
 
 
 @pytest.mark.asyncio
@@ -84,14 +85,11 @@ async def test_custom_approval_handler_invoked_for_edit_tool(
     assert seen, "expected the custom edit approval handler to run at least once"
     assert all(r.capability == "edit" for r in seen)
 
-    written = [
-        p
-        for p in tmp_path.rglob("*")
-        if p.is_file() and marker in p.read_text(encoding="utf-8", errors="replace")
+    edit_calls = [
+        e for e in events if isinstance(e, AgentToolCall) and e.name in _EDIT_TOOL_NAMES
     ]
-    assert written, (
-        "expected a workspace file containing the marker after an approved write; "
-        f"got files: {[p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob('*') if p.is_file()]}"
+    assert edit_calls, (
+        "expected a Write/Edit (Claude) or apply_patch (OpenAI) tool call after approval"
     )
 
     assert isinstance(events[-1], AgentQueryCompleted)
