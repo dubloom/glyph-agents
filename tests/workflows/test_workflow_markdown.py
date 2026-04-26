@@ -222,6 +222,41 @@ returns:
     }
 
 
+def test_parse_markdown_workflow_accepts_inline_bash_without_execute_key(tmp_path: Path) -> None:
+    workflow_path = tmp_path / "workflow.md"
+    workflow_path.write_text(
+        """---
+name: inspectWorkspace
+---
+
+## Step: inspectWorkspace
+
+```bash
+printf 'hello from bash'
+```
+
+returns:
+  stdout: str
+  stderr: str
+  exit_code: int
+""",
+        encoding="utf-8",
+    )
+
+    definition = parse_markdown_workflow(workflow_path)
+
+    assert len(definition.steps) == 1
+    assert definition.steps[0].kind == "execute"
+    assert definition.steps[0].execute_is_inline is True
+    assert definition.steps[0].execute_language == "bash"
+    assert definition.steps[0].execute == "printf 'hello from bash'"
+    assert definition.steps[0].returns == {
+        "stdout": "str",
+        "stderr": "str",
+        "exit_code": "int",
+    }
+
+
 @pytest.mark.asyncio
 async def test_load_markdown_workflow_runs_inline_python_steps(tmp_path: Path) -> None:
     workflow_path = tmp_path / "workflow.md"
@@ -262,6 +297,92 @@ returns:
 
     assert result["file_path"] == str(tmp_path / "postcard.txt")
     assert (tmp_path / "postcard.txt").read_text(encoding="utf-8") == "Lisbon"
+
+
+@pytest.mark.asyncio
+async def test_load_markdown_workflow_runs_inline_bash_steps(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    workflow_path = tmp_path / "workflow.md"
+    workflow_path.write_text(
+        """---
+name: inspectWorkspace
+options:
+  model: gpt-4.1-mini
+---
+
+## Step: inspectWorkspace
+
+```bash
+printf 'stdout=%s' "$GLYPH_WORKFLOW_DIR"
+```
+
+returns:
+  stdout: str
+  stderr: str
+  exit_code: int
+
+## Step: summarize
+Output: {{ stdout }}
+Exit code: {{ exit_code }}
+""",
+        encoding="utf-8",
+    )
+
+    fake_client = _FakeMarkdownClient()
+    monkeypatch.setattr(workflows_module, "GlyphClient", lambda options: fake_client)
+
+    workflow_cls = load_markdown_workflow(workflow_path)
+    result = await workflow_cls.run(session_id="markdown-bash")
+
+    assert fake_client.prompts == [
+        (f"Output: stdout={tmp_path}\nExit code: 0", "markdown-bash"),
+    ]
+    assert isinstance(result, AgentQueryCompleted)
+    assert result.message == f"Output: stdout={tmp_path}\nExit code: 0"
+
+
+@pytest.mark.asyncio
+async def test_load_markdown_workflow_runs_bash_file_step(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "probe.sh").write_text(
+        """#!/usr/bin/env bash
+printf 'dir=%s' "$GLYPH_WORKFLOW_DIR"
+""",
+        encoding="utf-8",
+    )
+    workflow_path = tmp_path / "workflow.md"
+    workflow_path.write_text(
+        """---
+name: probeDir
+options:
+  model: gpt-4.1-mini
+---
+
+## Step: probeDir
+execute:
+  file: probe.sh
+returns:
+  stdout: str
+  stderr: str
+  exit_code: int
+
+## Step: summarize
+Output: {{ stdout }}
+""",
+        encoding="utf-8",
+    )
+
+    fake_client = _FakeMarkdownClient()
+    monkeypatch.setattr(workflows_module, "GlyphClient", lambda options: fake_client)
+
+    workflow_cls = load_markdown_workflow(workflow_path)
+    result = await workflow_cls.run(session_id="markdown-bash-file")
+
+    assert fake_client.prompts == [(f"Output: dir={tmp_path}", "markdown-bash-file")]
+    assert isinstance(result, AgentQueryCompleted)
+    assert result.message == f"Output: dir={tmp_path}"
 
 
 class _FakeMarkdownClient:

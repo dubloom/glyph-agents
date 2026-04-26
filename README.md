@@ -10,17 +10,17 @@ Glyph has two core use cases:
 - A vendor-agnostic agent SDK
 - A workflow builder that can act like a `SKILL.md` executor
 
-## Why Glyph?
-
-- Stream normalized agent events from a single prompt.
-- Build sequential workflows where each step receives the previous step result.
-- Express workflows in Python or Markdown.
-- Run Markdown workflows directly from the CLI.
-
 ## Markdown Workflow Example
 
-This example loads deterministic context in Python, asks the model to draft a
-postcard, then saves the final message to disk:
+This example demonstrates how Glyph can execute workflows described entirely in Markdown.
+
+Each step in your workflow can do one of the following:
+- If it includes an `execute:` key, or contains a Python or Bash code block,
+  Glyph will run the code automatically for you.
+- If the step contains plain text, Glyph treats it as a prompt to the selected language model and generates a response.
+
+This lets you blend deterministic logic and LLM-powered actions seamlessly in a single document.
+
 
 ````markdown
 ---
@@ -64,6 +64,7 @@ output_path.write_text(previous_result.message, encoding="utf-8")
 return {"file_path": str(output_path)}
 ```
 
+<!-- This is a hint for readibility purpose and is not required. -->
 returns:
   file_path: str
 ````
@@ -77,6 +78,10 @@ glyph workflow.md
 
 Glyph is vendor-agnostic: change `options.model` and Glyph will infer the
 backend from the model name.
+
+Markdown workflows support inline deterministic steps with fenced `python` or
+`bash` blocks. Inline bash steps run in the workflow directory and expose the
+previous step result as `GLYPH_PREVIOUS_RESULT_JSON`.
 
 ## Install
 

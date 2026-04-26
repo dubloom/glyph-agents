@@ -27,3 +27,5 @@ Set your model with `GLYPH_MODEL`. If not provided, each example uses a sensible
 - `15_workflow_init_override.py`: override class-level workflow options and pass first-step input with `initial_input=...`
 - `16_workflow_streaming.py`: LLM step with `is_streaming=True` to stream `AgentText` and other events before `AgentQueryCompleted`
 - `17_workflow_markdown/`: load and run a Markdown-defined workflow with `execute:` Python handlers
+- `18_workflow_mardown_python/`: Markdown workflow with inline `python` fenced blocks
+- `19_workflow_markdown_bash/`: Markdown workflow with an inline `bash` step, then LLM + inline `python` save

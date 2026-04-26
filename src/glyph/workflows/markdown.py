@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 import importlib.util
 import inspect
+import json
+import os
 from pathlib import Path
 import re
 import textwrap
@@ -23,6 +26,8 @@ _COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _PROMPT_VARIABLE_RE = re.compile(r"{{\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*}}")
 _METADATA_LINE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\s*:")
 _SUPPORTED_STEP_METADATA_KEYS = {"execute", "model", "returns", "stop"}
+_INLINE_EXECUTE_FENCE_RE = re.compile(r"^```(?P<language>[A-Za-z0-9_+-]+)\s*$")
+_SUPPORTED_INLINE_EXECUTE_LANGUAGES = frozenset({"python", "bash"})
 _MISSING = object()
 
 _SCALAR_TYPES: dict[str, type[Any]] = {
@@ -36,6 +41,7 @@ _SCALAR_TYPES: dict[str, type[Any]] = {
 
 
 MarkdownStepKind = Literal["execute", "llm", "stop"]
+ExecuteLanguage = Literal["python", "bash"]
 
 
 @dataclass(frozen=True)
@@ -44,6 +50,7 @@ class MarkdownStep:
     kind: MarkdownStepKind
     execute: str | None
     execute_is_inline: bool
+    execute_language: ExecuteLanguage | None
     prompt: str | None
     model: str | None
     stop: str | None
@@ -201,18 +208,36 @@ def _normalize_execute_mapping(step_id: str, mapping: dict[str, Any]) -> str:
     function_name = function_raw.strip()
     if function_name == "main":
         return file_path
+    if file_path.lower().endswith(".sh"):
+        raise ValueError(
+            f"Step {step_id!r} bash scripts (`*.sh`) do not support `execute.function` "
+            f"({function_name!r}); omit `function` or use only `file:`."
+        )
     return f"{file_path}:{function_name}"
+
+
+def _infer_file_execute_language(step_id: str, execute_target: str) -> ExecuteLanguage:
+    script_part = execute_target.split(":", 1)[0]
+    suffix = Path(script_part).suffix.lower()
+    if suffix == ".py":
+        return "python"
+    if suffix == ".sh":
+        return "bash"
+    raise ValueError(
+        f"Step {step_id!r} execute.file must be a `.py` or `.sh` script; got {script_part!r}."
+    )
 
 
 def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
     inline_execute = _parse_inline_execute_section(step_id, section)
     if inline_execute is not None:
-        metadata, inline_execute_source = inline_execute
+        metadata, inline_execute_source, inline_execute_language = inline_execute
         prompt = ""
     else:
         metadata_lines, prompt = _split_step_metadata(section)
         metadata = _parse_mapping_block(metadata_lines, context=f"step {step_id!r}")
         inline_execute_source = None
+        inline_execute_language = None
 
     execute = metadata.pop("execute", None)
     model = metadata.pop("model", None)
@@ -243,6 +268,7 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
             kind="stop",
             execute=None,
             execute_is_inline=False,
+            execute_language=None,
             prompt=None,
             model=None,
             stop=stop.strip(),
@@ -251,7 +277,7 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
 
     if inline_execute_source is not None:
         if execute is not None:
-            raise ValueError(f"Step {step_id!r} cannot declare both `execute:` and an inline Python block.")
+            raise ValueError(f"Step {step_id!r} cannot declare both `execute:` and an inline code block.")
         execute = inline_execute_source
 
     if execute is not None and prompt:
@@ -261,22 +287,29 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
         if inline_execute_source is not None:
             execute_target = execute.strip()
             if not execute_target:
-                raise ValueError(f"Inline execute step {step_id!r} must contain a non-empty Python block.")
+                language_name = (inline_execute_language or "python").capitalize()
+                raise ValueError(f"Inline execute step {step_id!r} must contain a non-empty {language_name} block.")
         else:
             if not isinstance(execute, dict):
                 raise ValueError(
                     f"Step {step_id!r} must declare `execute:` as a mapping with `file:` "
-                    f"and optional `function:` (or use an inline ```python block)."
+                    f"and optional `function:` (or use an inline ```python or ```bash block)."
                 )
             execute_target = _normalize_execute_mapping(step_id, execute)
         if model is not None:
             raise ValueError(f"Execute step {step_id!r} must not declare `model:`.")
         normalized_returns = _normalize_returns(step_id=step_id, returns=returns)
+        file_execute_language = (
+            inline_execute_language
+            if inline_execute_source is not None
+            else _infer_file_execute_language(step_id, execute_target)
+        )
         return MarkdownStep(
             step_id=step_id,
             kind="execute",
             execute=execute_target,
             execute_is_inline=inline_execute_source is not None,
+            execute_language=file_execute_language,
             prompt=None,
             model=None,
             stop=None,
@@ -295,6 +328,7 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
         kind="llm",
         execute=None,
         execute_is_inline=False,
+        execute_language=None,
         prompt=prompt,
         model=model.strip() if isinstance(model, str) else None,
         stop=None,
@@ -314,19 +348,31 @@ def _split_step_metadata(section: str) -> tuple[list[str], str]:
     return metadata_lines, prompt
 
 
-def _parse_inline_execute_section(step_id: str, section: str) -> tuple[dict[str, Any], str] | None:
+def _parse_inline_execute_section(
+    step_id: str, section: str
+) -> tuple[dict[str, Any], str, ExecuteLanguage] | None:
     lines = section.splitlines()
     leading_metadata_lines, index = _consume_step_metadata(
         lines,
         start=0,
         supported_metadata_keys=_SUPPORTED_STEP_METADATA_KEYS,
     )
-    if index >= len(lines) or lines[index].strip() != "```python":
+    if index >= len(lines):
         return None
+
+    fence_match = _INLINE_EXECUTE_FENCE_RE.fullmatch(lines[index].strip())
+    if fence_match is None:
+        return None
+
+    language = fence_match.group("language").lower()
+    if language not in _SUPPORTED_INLINE_EXECUTE_LANGUAGES:
+        return None
+    inline_execute_language: ExecuteLanguage = "python" if language == "python" else "bash"
 
     fence_end = _find_fence_end(lines, start=index + 1)
     if fence_end is None:
-        raise ValueError(f"Inline Python step {step_id!r} must close its fenced code block with ```.")
+        language_name = inline_execute_language.capitalize()
+        raise ValueError(f"Inline {language_name} step {step_id!r} must close its fenced code block with ```.")
 
     trailing_metadata_lines, trailing_index = _consume_step_metadata(
         lines,
@@ -345,9 +391,10 @@ def _parse_inline_execute_section(step_id: str, section: str) -> tuple[dict[str,
 
     inline_source = textwrap.dedent("\n".join(lines[index + 1 : fence_end])).strip("\n")
     if not inline_source.strip():
-        raise ValueError(f"Inline Python step {step_id!r} must contain code inside the fenced block.")
+        language_name = inline_execute_language.capitalize()
+        raise ValueError(f"Inline {language_name} step {step_id!r} must contain code inside the fenced block.")
 
-    return {**leading_metadata, **trailing_metadata}, inline_source
+    return {**leading_metadata, **trailing_metadata}, inline_source, inline_execute_language
 
 
 def _consume_step_metadata(
@@ -582,13 +629,27 @@ def _build_step_method(
 ):
     if step_definition.kind == "execute":
         if step_definition.execute_is_inline:
-            handler = _load_inline_execute_handler(
-                step_definition.execute or "",
-                workflow_path=workflow_path,
-                step_id=step_definition.step_id,
-            )
+            if step_definition.execute_language == "bash":
+                handler = _load_inline_bash_execute_handler(
+                    step_definition.execute or "",
+                    workflow_path=workflow_path,
+                    step_id=step_definition.step_id,
+                )
+            else:
+                handler = _load_inline_execute_handler(
+                    step_definition.execute or "",
+                    workflow_path=workflow_path,
+                    step_id=step_definition.step_id,
+                )
         else:
-            handler = _load_execute_handler(step_definition.execute or "", workflow_path.parent)
+            if step_definition.execute_language == "bash":
+                handler = _load_bash_file_execute_handler(
+                    step_definition.execute or "",
+                    workflow_path=workflow_path,
+                    step_id=step_definition.step_id,
+                )
+            else:
+                handler = _load_execute_handler(step_definition.execute or "", workflow_path.parent)
 
         async def _execute_step(self, previous_result: Any = None) -> Any:
             result = await _invoke_execute_handler(handler, previous_result)
@@ -711,6 +772,36 @@ def _load_execute_handler(target: str, base_directory: Path):
     return handler
 
 
+def _load_bash_file_execute_handler(target: str, *, workflow_path: Path, step_id: str):
+    script_path_str, separator, function_name = target.partition(":")
+    if separator != "" and function_name.strip() not in ("", "main"):
+        raise ValueError(
+            f"Invalid bash execute target {target!r}; expected `path/to/script.sh` without a function name."
+        )
+
+    script_path = Path(script_path_str)
+    if not script_path.is_absolute():
+        script_path = (workflow_path.parent / script_path).resolve()
+
+    if script_path.suffix.lower() != ".sh":
+        raise ValueError(f"Bash execute target {target!r} must point to a `.sh` file.")
+    if not script_path.exists():
+        raise ValueError(f"Execute target script {script_path} does not exist.")
+
+    async def _run_file_bash(previous_result: Any = None) -> dict[str, Any]:
+        return await _run_bash_step(
+            step_id=step_id,
+            workflow_path=workflow_path,
+            previous_result=previous_result,
+            bash_args=[str(script_path)],
+            error_label="Bash script",
+        )
+
+    _run_file_bash.__name__ = _step_method_name(0, f"file_{step_id}_bash")
+    _run_file_bash.__qualname__ = _run_file_bash.__name__
+    return _run_file_bash
+
+
 def _load_inline_execute_handler(source: str, *, workflow_path: Path, step_id: str):
     function_name = _step_method_name(0, f"inline_{step_id}")
     function_source = (
@@ -723,6 +814,98 @@ def _load_inline_execute_handler(source: str, *, workflow_path: Path, step_id: s
     }
     exec(compile(function_source, str(workflow_path), "exec"), namespace)
     return namespace[function_name]
+
+
+def _load_inline_bash_execute_handler(source: str, *, workflow_path: Path, step_id: str):
+    async def _run_inline_bash(previous_result: Any = None) -> dict[str, Any]:
+        return await _run_inline_bash_source(
+            source,
+            workflow_path=workflow_path,
+            step_id=step_id,
+            previous_result=previous_result,
+        )
+
+    _run_inline_bash.__name__ = _step_method_name(0, f"inline_{step_id}_bash")
+    _run_inline_bash.__qualname__ = _run_inline_bash.__name__
+    return _run_inline_bash
+
+
+async def _run_bash_step(
+    *,
+    step_id: str,
+    workflow_path: Path,
+    previous_result: Any,
+    bash_args: list[str],
+    error_label: str = "Bash",
+) -> dict[str, Any]:
+    env = os.environ.copy()
+    env["GLYPH_WORKFLOW_PATH"] = str(workflow_path)
+    env["GLYPH_WORKFLOW_DIR"] = str(workflow_path.parent)
+    env["GLYPH_STEP_ID"] = step_id
+    env["GLYPH_PREVIOUS_RESULT_JSON"] = _serialize_bash_previous_result(previous_result)
+    if isinstance(previous_result, AgentQueryCompleted) and previous_result.message is not None:
+        env["GLYPH_PREVIOUS_RESULT_MESSAGE"] = previous_result.message
+
+    process = await asyncio.create_subprocess_exec(
+        "/bin/bash",
+        *bash_args,
+        cwd=str(workflow_path.parent),
+        env=env,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout_bytes, stderr_bytes = await process.communicate()
+    stdout = stdout_bytes.decode("utf-8")
+    stderr = stderr_bytes.decode("utf-8")
+    result = {
+        "stdout": stdout,
+        "stderr": stderr,
+        "exit_code": process.returncode,
+    }
+    if process.returncode != 0:
+        raise RuntimeError(_format_bash_step_error(step_id=step_id, result=result, label=error_label))
+    return result
+
+
+async def _run_inline_bash_source(
+    source: str,
+    *,
+    workflow_path: Path,
+    step_id: str,
+    previous_result: Any,
+) -> dict[str, Any]:
+    return await _run_bash_step(
+        step_id=step_id,
+        workflow_path=workflow_path,
+        previous_result=previous_result,
+        bash_args=["-c", source],
+        error_label="Inline Bash",
+    )
+
+
+def _serialize_bash_previous_result(previous_result: Any) -> str:
+    if isinstance(previous_result, AgentQueryCompleted):
+        payload = {
+            "is_error": previous_result.is_error,
+            "stop_reason": previous_result.stop_reason,
+            "message": previous_result.message,
+            "usage": previous_result.usage,
+            "total_cost_usd": previous_result.total_cost_usd,
+            "extra": previous_result.extra,
+        }
+        return json.dumps(payload)
+    return json.dumps(previous_result, default=str)
+
+
+def _format_bash_step_error(*, step_id: str, result: dict[str, Any], label: str = "Bash") -> str:
+    details = [f"{label} step {step_id!r} failed with exit code {result['exit_code']}."]
+    stderr = str(result["stderr"]).strip()
+    stdout = str(result["stdout"]).strip()
+    if stderr:
+        details.append(f"stderr:\n{stderr}")
+    elif stdout:
+        details.append(f"stdout:\n{stdout}")
+    return "\n".join(details)
 
 
 async def _invoke_execute_handler(handler: Any, previous_result: Any) -> Any:
