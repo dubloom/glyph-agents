@@ -17,7 +17,9 @@ name: writePostcard
 ---
 
 ## Step: loadTripContext
-execute: handlers.py:load_trip_context
+execute:
+  file: handlers.py
+  function: load_trip_context
 returns:
   city: str
   mood: str
@@ -35,6 +37,92 @@ returns:
         "mood": "str",
         "memory": "str",
     }
+    assert definition.steps[0].execute == "handlers.py:load_trip_context"
+
+
+def test_parse_markdown_workflow_execute_file_defaults_to_main(tmp_path: Path) -> None:
+    workflow_path = tmp_path / "workflow.md"
+    workflow_path.write_text(
+        """---
+name: savePostcard
+---
+
+## Step: savePostcard
+execute:
+  file: handlers.py
+returns:
+  file_path: str
+""",
+        encoding="utf-8",
+    )
+
+    definition = parse_markdown_workflow(workflow_path)
+
+    assert len(definition.steps) == 1
+    assert definition.steps[0].execute == "handlers.py"
+
+
+def test_parse_markdown_workflow_rejects_string_execute(tmp_path: Path) -> None:
+    workflow_path = tmp_path / "workflow.md"
+    workflow_path.write_text(
+        """---
+name: bad
+---
+
+## Step: one
+execute: handlers.py:main
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="mapping with `file:`"):
+        parse_markdown_workflow(workflow_path)
+
+
+def test_parse_markdown_workflow_rejects_unknown_execute_keys(tmp_path: Path) -> None:
+    workflow_path = tmp_path / "workflow.md"
+    workflow_path.write_text(
+        """---
+name: bad
+---
+
+## Step: one
+execute:
+  file: handlers.py
+  module: foo
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="unknown key"):
+        parse_markdown_workflow(workflow_path)
+
+
+def test_parse_markdown_workflow_allows_blank_line_between_step_metadata_keys(tmp_path: Path) -> None:
+    """Blank lines between `execute:` and `returns:` must not turn `returns` into prompt text."""
+
+    workflow_path = tmp_path / "workflow.md"
+    workflow_path.write_text(
+        """---
+name: savePostcard
+---
+
+## Step: savePostcard
+
+execute:
+  file: handlers.py
+
+returns:
+  file_path: str
+""",
+        encoding="utf-8",
+    )
+
+    definition = parse_markdown_workflow(workflow_path)
+
+    assert len(definition.steps) == 1
+    assert definition.steps[0].kind == "execute"
+    assert definition.steps[0].returns == {"file_path": "str"}
 
 
 def test_load_execute_handler_defaults_to_main(tmp_path: Path) -> None:
@@ -84,7 +172,9 @@ name: writePostcard
 ---
 
 ## Step: loadTripContext
-execute: handlers.py:load_trip_context
+execute:
+  file: handlers.py
+  function: load_trip_context
 
 ## Step: draftPostcard
 Write a warm postcard from Lisbon in 3 sentences max.

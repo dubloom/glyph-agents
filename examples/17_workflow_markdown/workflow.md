@@ -10,11 +10,10 @@ options:
 <!-- Markdown comments are ignored by the workflow loader. -->
 
 ## Step: loadTripContext
-execute: handlers.py:load_trip_context
-returns:
-  city: str
-  mood: str
-  memory: str
+
+execute:
+  file: handlers.py
+  function: load_trip_context
 
 ## Step: draftPostcard
 
@@ -25,6 +24,10 @@ Mention this memory: {{ memory }}.
 Keep it to 3 sentences maximum.
 
 ## Step: savePostcard
-execute: handlers.py
+
+execute:
+  file: handlers.py
+
+<!-- This is non necessary but it helps understand what a step will return. -->
 returns:
   file_path: str

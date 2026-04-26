@@ -175,6 +175,35 @@ def _parse_steps(body: str) -> list[MarkdownStep]:
     return steps
 
 
+def _normalize_execute_mapping(step_id: str, mapping: dict[str, Any]) -> str:
+    """Build the internal execute target string from ``file`` / ``function`` metadata."""
+
+    allowed = frozenset({"file", "function"})
+    unknown = set(mapping) - allowed
+    if unknown:
+        keys = ", ".join(sorted(unknown))
+        raise ValueError(f"Step {step_id!r} execute has unknown key(s): {keys}.")
+
+    file_raw = mapping.get("file")
+    if not isinstance(file_raw, str) or not file_raw.strip():
+        raise ValueError(f"Step {step_id!r} execute.file must be a non-empty string.")
+
+    file_path = file_raw.strip()
+    function_raw = mapping.get("function")
+    if function_raw is None:
+        return file_path
+
+    if not isinstance(function_raw, str) or not function_raw.strip():
+        raise ValueError(
+            f"Step {step_id!r} execute.function must be a non-empty string when provided."
+        )
+
+    function_name = function_raw.strip()
+    if function_name == "main":
+        return file_path
+    return f"{file_path}:{function_name}"
+
+
 def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
     inline_execute = _parse_inline_execute_section(step_id, section)
     if inline_execute is not None:
@@ -229,17 +258,24 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
         raise ValueError(f"Step {step_id!r} cannot declare both `execute:` and prompt text in v1.")
 
     if execute is not None:
-        if not isinstance(execute, str) or not execute.strip():
-            raise ValueError(
-                f"Execute step {step_id!r} must declare a non-empty `execute:` target or inline Python block."
-            )
+        if inline_execute_source is not None:
+            execute_target = execute.strip()
+            if not execute_target:
+                raise ValueError(f"Inline execute step {step_id!r} must contain a non-empty Python block.")
+        else:
+            if not isinstance(execute, dict):
+                raise ValueError(
+                    f"Step {step_id!r} must declare `execute:` as a mapping with `file:` "
+                    f"and optional `function:` (or use an inline ```python block)."
+                )
+            execute_target = _normalize_execute_mapping(step_id, execute)
         if model is not None:
             raise ValueError(f"Execute step {step_id!r} must not declare `model:`.")
         normalized_returns = _normalize_returns(step_id=step_id, returns=returns)
         return MarkdownStep(
             step_id=step_id,
             kind="execute",
-            execute=execute.strip(),
+            execute=execute_target,
             execute_is_inline=inline_execute_source is not None,
             prompt=None,
             model=None,
@@ -332,6 +368,17 @@ def _consume_step_metadata(
                 index += 1
                 while index < len(lines) and not lines[index].strip():
                     index += 1
+                # A blank line may separate sibling keys (e.g. `execute:` then `returns:`)
+                # or separate metadata from the prompt. Continue only if the next
+                # non-empty line is another supported top-level metadata key.
+                if index < len(lines):
+                    next_line = lines[index]
+                    if next_line.strip().startswith("```"):
+                        break
+                    if _METADATA_LINE_RE.match(next_line):
+                        key, _sep, _val = next_line.partition(":")
+                        if key.strip() in supported_metadata_keys:
+                            continue
                 break
             index += 1
             continue
