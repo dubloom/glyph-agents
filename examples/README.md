@@ -30,3 +30,4 @@ Set your model with `GLYPH_MODEL`. If not provided, each example uses a sensible
 - `18_workflow_mardown_python/`: Markdown workflow with inline `python` fenced blocks
 - `19_workflow_markdown_bash/`: Markdown workflow with an inline `bash` step, then LLM + inline `python` save
 - `20_workflow_markdown_llm_first/`: Markdown workflow whose first step is LLM; placeholders use `initial_input` dict keys
+- `21_workflow_markdown_model_override/`: Markdown workflow with workflow-level `options.model` plus step-level `model:` override on an LLM step

@@ -102,12 +102,32 @@ Run the workflow with:
 glyph workflow.md
 ```
 
-Glyph is vendor-agnostic: change `options.model` and Glyph will infer the
-backend from the model name.
+Pass first-step input from the CLI with `--initial-input` (or `-i`). The value
+must be valid JSON and can be an object, array, or scalar:
 
-Markdown workflows support inline deterministic steps with fenced `python` or
-`bash` blocks. Inline bash steps run in the workflow directory and expose the
-previous step result as `GLYPH_PREVIOUS_RESULT_JSON`.
+```bash
+glyph workflow.md --initial-input '{"topic":"foo"}'
+glyph workflow.md -i '"foo"'
+```
+
+Prompt-only Markdown steps can also override the workflow default model with a
+step-level `model:` key:
+
+````markdown
+---
+options:
+  model: gpt-5.4-mini
+---
+
+## Step: draftBlurb
+
+model: gpt-4.1-mini
+
+Write one crisp sentence about {{ topic }}.
+````
+
+Use a model from the same provider as the workflow default. See
+`examples/21_workflow_markdown_model_override/`.
 
 ## Install
 
@@ -332,4 +352,5 @@ python examples/16_workflow_streaming.py
 glyph examples/17_workflow_markdown/workflow.md
 glyph examples/18_workflow_markdown_python/workflow.md
 glyph examples/19_workflow_markdown_bash/worfklow.md
+python examples/21_workflow_markdown_model_override/main.py
 ```
