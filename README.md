@@ -42,7 +42,11 @@ options:
   allowed_tools: [Read, Glob, Grep]
 ---
 
+<!-- Step sections are mandatory -->
 ## Step: loadTripContext
+<!-- This step is executed by the framework and not by an LLM.
+Code steps are compatible with bash and python
+-->
 
 ```python
 return {
@@ -52,12 +56,19 @@ return {
 }
 ```
 
-<!-- Each step receives the previous step result automatically. -->
+<!-- You can also provide a file name like
+execute:
+  file: my_file.py | my_file.sh
+  function: optional function to execute, otherwise will fallback to main() for python file
+-->
+
 
 ## Step: draftPostcard
+<!-- If a step contains only text, it is considered as a prompt.
+Glyph will trigger an agent using the options at the top of the file.
+-->
 
 <!-- Glyph fills template variables from previous step output. -->
-
 Write a short postcard message from {{ city }}.
 
 The mood should feel {{ mood }}.
@@ -66,6 +77,11 @@ Keep it to 3 sentences maximum.
 
 ## Step: savePostcard
 
+<!-- Each step receives the previous step result automatically in a variable
+called previous_result.
+
+In the case of an agent step, you can access the message using previous_result.message 
+-->
 ```python
 from pathlib import Path
 
@@ -314,5 +330,6 @@ python examples/14_workflow_context.py
 python examples/15_workflow_init_override.py
 python examples/16_workflow_streaming.py
 glyph examples/17_workflow_markdown/workflow.md
-glyph examples/18_workflow_mardown_python/workflow.md
+glyph examples/18_workflow_markdown_python/workflow.md
+glyph examples/19_workflow_markdown_bash/worfklow.md
 ```
