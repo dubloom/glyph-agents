@@ -651,8 +651,8 @@ def _build_step_method(
             else:
                 handler = _load_execute_handler(step_definition.execute or "", workflow_path.parent)
 
-        async def _execute_step(self, previous_result: Any = None) -> Any:
-            result = await _invoke_execute_handler(handler, previous_result)
+        async def _execute_step(self, step_input: Any = None) -> Any:
+            result = await _invoke_execute_handler(handler, step_input)
             _store_execute_result(
                 self=self,
                 step_definition=step_definition,
@@ -667,8 +667,8 @@ def _build_step_method(
     if step_definition.kind == "llm":
         prompt_template = step_definition.prompt or ""
 
-        async def _llm_step(self, previous_result: Any = None) -> None:
-            context = _prompt_context(self, previous_result)
+        async def _llm_step(self, step_input: Any = None) -> None:
+            context = _prompt_context(self, step_input)
             self.prompt = _render_prompt_template(prompt_template, context)
             return None
 
@@ -676,10 +676,10 @@ def _build_step_method(
         _llm_step.__qualname__ = method_name
         return step(prompt=prompt_template, model=step_definition.model)(_llm_step)
 
-    async def _stop_step(self, previous_result: Any = None) -> None:
+    async def _stop_step(self, step_input: Any = None) -> None:
         value = _resolve_stop_value(
             expression=step_definition.stop or "",
-            previous_result=previous_result,
+            step_input=step_input,
             context=_markdown_context(self),
         )
         self.stop_workflow(value)
@@ -701,14 +701,14 @@ def _markdown_context(workflow: Any) -> dict[str, Any]:
     return context
 
 
-def _prompt_context(workflow: Any, previous_result: Any) -> dict[str, Any]:
+def _prompt_context(workflow: Any, step_input: Any) -> dict[str, Any]:
     context = dict(_markdown_context(workflow))
-    if previous_result is None:
+    if step_input is None:
         return context
 
-    context.setdefault("input", previous_result)
-    if isinstance(previous_result, dict):
-        for key, value in previous_result.items():
+    context.setdefault("step_input", step_input)
+    if isinstance(step_input, dict):
+        for key, value in step_input.items():
             context.setdefault(key, value)
     return context
 
@@ -788,11 +788,11 @@ def _load_bash_file_execute_handler(target: str, *, workflow_path: Path, step_id
     if not script_path.exists():
         raise ValueError(f"Execute target script {script_path} does not exist.")
 
-    async def _run_file_bash(previous_result: Any = None) -> dict[str, Any]:
+    async def _run_file_bash(step_input: Any = None) -> dict[str, Any]:
         return await _run_bash_step(
             step_id=step_id,
             workflow_path=workflow_path,
-            previous_result=previous_result,
+            step_input=step_input,
             bash_args=[str(script_path)],
             error_label="Bash script",
         )
@@ -805,7 +805,7 @@ def _load_bash_file_execute_handler(target: str, *, workflow_path: Path, step_id
 def _load_inline_execute_handler(source: str, *, workflow_path: Path, step_id: str):
     function_name = _step_method_name(0, f"inline_{step_id}")
     function_source = (
-        f"async def {function_name}(previous_result=None):\n"
+        f"async def {function_name}(step_input=None):\n"
         f"{textwrap.indent(source, '    ')}\n"
     )
     namespace = {
@@ -817,12 +817,12 @@ def _load_inline_execute_handler(source: str, *, workflow_path: Path, step_id: s
 
 
 def _load_inline_bash_execute_handler(source: str, *, workflow_path: Path, step_id: str):
-    async def _run_inline_bash(previous_result: Any = None) -> dict[str, Any]:
+    async def _run_inline_bash(step_input: Any = None) -> dict[str, Any]:
         return await _run_inline_bash_source(
             source,
             workflow_path=workflow_path,
             step_id=step_id,
-            previous_result=previous_result,
+            step_input=step_input,
         )
 
     _run_inline_bash.__name__ = _step_method_name(0, f"inline_{step_id}_bash")
@@ -834,7 +834,7 @@ async def _run_bash_step(
     *,
     step_id: str,
     workflow_path: Path,
-    previous_result: Any,
+    step_input: Any,
     bash_args: list[str],
     error_label: str = "Bash",
 ) -> dict[str, Any]:
@@ -842,9 +842,9 @@ async def _run_bash_step(
     env["GLYPH_WORKFLOW_PATH"] = str(workflow_path)
     env["GLYPH_WORKFLOW_DIR"] = str(workflow_path.parent)
     env["GLYPH_STEP_ID"] = step_id
-    env["GLYPH_PREVIOUS_RESULT_JSON"] = _serialize_bash_previous_result(previous_result)
-    if isinstance(previous_result, AgentQueryCompleted) and previous_result.message is not None:
-        env["GLYPH_PREVIOUS_RESULT_MESSAGE"] = previous_result.message
+    env["GLYPH_STEP_INPUT_JSON"] = _serialize_bash_step_input(step_input)
+    if isinstance(step_input, AgentQueryCompleted) and step_input.message is not None:
+        env["GLYPH_STEP_INPUT_MESSAGE"] = step_input.message
 
     process = await asyncio.create_subprocess_exec(
         "/bin/bash",
@@ -872,29 +872,29 @@ async def _run_inline_bash_source(
     *,
     workflow_path: Path,
     step_id: str,
-    previous_result: Any,
+    step_input: Any,
 ) -> dict[str, Any]:
     return await _run_bash_step(
         step_id=step_id,
         workflow_path=workflow_path,
-        previous_result=previous_result,
+        step_input=step_input,
         bash_args=["-c", source],
         error_label="Inline Bash",
     )
 
 
-def _serialize_bash_previous_result(previous_result: Any) -> str:
-    if isinstance(previous_result, AgentQueryCompleted):
+def _serialize_bash_step_input(step_input: Any) -> str:
+    if isinstance(step_input, AgentQueryCompleted):
         payload = {
-            "is_error": previous_result.is_error,
-            "stop_reason": previous_result.stop_reason,
-            "message": previous_result.message,
-            "usage": previous_result.usage,
-            "total_cost_usd": previous_result.total_cost_usd,
-            "extra": previous_result.extra,
+            "is_error": step_input.is_error,
+            "stop_reason": step_input.stop_reason,
+            "message": step_input.message,
+            "usage": step_input.usage,
+            "total_cost_usd": step_input.total_cost_usd,
+            "extra": step_input.extra,
         }
         return json.dumps(payload)
-    return json.dumps(previous_result, default=str)
+    return json.dumps(step_input, default=str)
 
 
 def _format_bash_step_error(*, step_id: str, result: dict[str, Any], label: str = "Bash") -> str:
@@ -908,12 +908,12 @@ def _format_bash_step_error(*, step_id: str, result: dict[str, Any], label: str 
     return "\n".join(details)
 
 
-async def _invoke_execute_handler(handler: Any, previous_result: Any) -> Any:
+async def _invoke_execute_handler(handler: Any, step_input: Any) -> Any:
     parameter_count = len(inspect.signature(handler).parameters)
     if parameter_count == 0:
         result = handler()
     elif parameter_count == 1:
-        result = handler(previous_result)
+        result = handler(step_input)
     else:
         raise TypeError(
             f"Execute handler {handler.__name__!r} must accept zero or one argument, got {parameter_count}."
@@ -965,12 +965,12 @@ def _validate_value(*, value: Any, expected_type: str, label: str) -> None:
         )
 
 
-def _resolve_stop_value(*, expression: str, previous_result: Any, context: dict[str, Any]) -> Any:
+def _resolve_stop_value(*, expression: str, step_input: Any, context: dict[str, Any]) -> Any:
     if expression in context:
         return context[expression]
-    if isinstance(previous_result, dict) and expression in previous_result:
-        return previous_result[expression]
-    if isinstance(previous_result, AgentQueryCompleted) and expression == "message":
-        return previous_result.message
+    if isinstance(step_input, dict) and expression in step_input:
+        return step_input[expression]
+    if isinstance(step_input, AgentQueryCompleted) and expression == "message":
+        return step_input.message
     return _parse_scalar(expression)
 

@@ -122,17 +122,17 @@ class GlyphWorkflow:
         result: Any = initial_input
         shared_client = None
 
-        async def _run_descriptor(descriptor: StepDescriptor, previous_result: Any) -> Any:
+        async def _run_descriptor(descriptor: StepDescriptor, step_input: Any) -> Any:
             if descriptor.kind == "llm":
                 if shared_client is None:
                     raise RuntimeError("LLM step requires an initialized GlyphClient.")
                 return await self._run_llm_step(
                     descriptor=descriptor,
-                    previous_result=previous_result,
+                    step_input=step_input,
                     session_id=session_id,
                     shared_client=shared_client,
                 )
-            return await self._run_python_step(descriptor, previous_result)
+            return await self._run_python_step(descriptor, step_input)
 
         async def _run_all_steps() -> Any:
             nonlocal result
@@ -172,16 +172,16 @@ class GlyphWorkflow:
     async def _run_python_step(
         self,
         descriptor: StepDescriptor,
-        previous_result: Any,
+        step_input: Any,
     ) -> Any:
         function_to_exec = descriptor.func.__get__(self, type(self))
-        return await self._call_step(function_to_exec, previous_result)
+        return await self._call_step(function_to_exec, step_input)
 
     async def _run_llm_step(
         self,
         *,
         descriptor: StepDescriptor,
-        previous_result: Any,
+        step_input: Any,
         session_id: str,
         shared_client: GlyphClient,
     ) -> Any:
@@ -198,14 +198,14 @@ class GlyphWorkflow:
         if inspect.isasyncgenfunction(descriptor.func):
             return await self._run_llm_generator_step(
                 func_to_exec=func_to_exec,
-                previous_result=previous_result,
+                step_input=step_input,
                 session_id=session_id,
                 shared_client=shared_client,
                 step_model=descriptor.model,
                 is_streaming=descriptor.is_streaming,
             )
 
-        await self._call_step(func_to_exec, previous_result)
+        await self._call_step(func_to_exec, step_input)
 
         return await self._run_llm_query(
             prompt=self.prompt,
@@ -214,11 +214,11 @@ class GlyphWorkflow:
             step_model=descriptor.model,
         )
 
-    async def _call_step(self, func_to_exec: Callable[..., Any], previous_result: Any) -> Any:
+    async def _call_step(self, func_to_exec: Callable[..., Any], step_input: Any) -> Any:
         parameters = inspect.signature(func_to_exec).parameters
         if len(parameters) == 0:
             return await func_to_exec()
-        return await func_to_exec(previous_result)
+        return await func_to_exec(step_input)
 
     async def _run_llm_query(
         self,
@@ -272,7 +272,7 @@ class GlyphWorkflow:
         self,
         *,
         func_to_exec: Callable[..., Any],
-        previous_result: Any,
+        step_input: Any,
         session_id: str,
         shared_client: GlyphClient,
         step_model: str | None,
@@ -283,7 +283,7 @@ class GlyphWorkflow:
         if len(parameters) == 0:
             call_args = ()
         else:
-            call_args = (previous_result,)
+            call_args = (step_input,)
 
         generated = func_to_exec(*call_args)
 

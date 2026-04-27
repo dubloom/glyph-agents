@@ -35,7 +35,7 @@ Keep it to 3 sentences maximum.
 ```python
     from pathlib import Path
     output_path = Path(__file__).with_name("postcard.txt")
-    output_path.write_text(previous_result.message, encoding="utf-8")
+    output_path.write_text(step_input.message, encoding="utf-8")
     return {"file_path": str(output_path)}
 ```
 

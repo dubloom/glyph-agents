@@ -128,7 +128,7 @@ returns:
 def test_load_execute_handler_defaults_to_main(tmp_path: Path) -> None:
     script_path = tmp_path / "handlers.py"
     script_path.write_text(
-        """async def main(previous_result=None):
+        """async def main(step_input=None):
     return {"ok": True}
 """,
         encoding="utf-8",
@@ -282,7 +282,7 @@ returns:
 from pathlib import Path
 
 output_path = Path(__file__).with_name("postcard.txt")
-output_path.write_text(previous_result["city"], encoding="utf-8")
+output_path.write_text(step_input["city"], encoding="utf-8")
 return {"file_path": str(output_path)}
 ```
 
@@ -414,7 +414,7 @@ options:
 
 ## Step: draftCommand
 Flat: {{ query }}
-Nested: {{ input.query }}
+Nested: {{ step_input.query }}
 Missing: {{ missing }}
 """,
         encoding="utf-8",
@@ -434,7 +434,7 @@ Missing: {{ missing }}
 
 
 @pytest.mark.asyncio
-async def test_load_markdown_workflow_exposes_scalar_initial_input_as_input(
+async def test_load_markdown_workflow_exposes_scalar_initial_input_as_step_input(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     workflow_path = tmp_path / "workflow.md"
@@ -446,7 +446,7 @@ options:
 ---
 
 ## Step: draftCommand
-Prompt: {{ input }}
+Prompt: {{ step_input }}
 """,
         encoding="utf-8",
     )

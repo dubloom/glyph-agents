@@ -78,15 +78,15 @@ Keep it to 3 sentences maximum.
 ## Step: savePostcard
 
 <!-- Each step receives the previous step result automatically in a variable
-called previous_result.
+called step_input.
 
-In the case of an agent step, you can access the message using previous_result.message 
+In the case of an agent step, you can access the message using step_input.message
 -->
 ```python
 from pathlib import Path
 
 output_path = Path(__file__).with_name("postcard.txt")
-output_path.write_text(previous_result.message, encoding="utf-8")
+output_path.write_text(step_input.message, encoding="utf-8")
 return {"file_path": str(output_path)}
 ```
 
