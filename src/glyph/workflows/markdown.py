@@ -14,6 +14,8 @@ import textwrap
 from typing import Any
 from typing import Literal
 
+from glyph.artifacts import ArtifactContext
+from glyph.artifacts import get_artifact
 from glyph.messages import AgentQueryCompleted
 from glyph.options import AgentOptions
 from glyph.options import PermissionPolicy
@@ -25,7 +27,7 @@ _STEP_HEADING_RE = re.compile(r"^## Step:\s*(?P<step_id>.+?)\s*$", re.MULTILINE)
 _COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _PROMPT_VARIABLE_RE = re.compile(r"{{\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*}}")
 _METADATA_LINE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\s*:")
-_SUPPORTED_STEP_METADATA_KEYS = {"execute", "model", "returns", "stop"}
+_SUPPORTED_STEP_METADATA_KEYS = {"artifact", "execute", "model", "returns", "stop", "with"}
 _INLINE_EXECUTE_FENCE_RE = re.compile(r"^```(?P<language>[A-Za-z0-9_+-]+)\s*$")
 _SUPPORTED_INLINE_EXECUTE_LANGUAGES = frozenset({"python", "bash"})
 _MISSING = object()
@@ -40,7 +42,7 @@ _SCALAR_TYPES: dict[str, type[Any]] = {
 }
 
 
-MarkdownStepKind = Literal["execute", "llm", "stop"]
+MarkdownStepKind = Literal["artifact", "execute", "llm", "stop"]
 ExecuteLanguage = Literal["python", "bash"]
 
 
@@ -51,6 +53,8 @@ class MarkdownStep:
     execute: str | None
     execute_is_inline: bool
     execute_language: ExecuteLanguage | None
+    artifact: str | None
+    artifact_args: dict[str, Any] | None
     prompt: str | None
     model: str | None
     stop: str | None
@@ -240,6 +244,8 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
         inline_execute_language = None
 
     execute = metadata.pop("execute", None)
+    artifact = metadata.pop("artifact", None)
+    artifact_args = metadata.pop("with", None)
     model = metadata.pop("model", None)
     returns = metadata.pop("returns", None)
     stop = metadata.pop("stop", None)
@@ -254,13 +260,18 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
 
     if stop is not None:
         if (
+            artifact is not None
+            or artifact_args is not None
+            or
             execute is not None
             or inline_execute_source is not None
             or model is not None
             or returns is not None
             or prompt
         ):
-            raise ValueError(f"Stop step {step_id!r} cannot declare `execute`, `model`, `returns`, or prompt text.")
+            raise ValueError(
+                f"Stop step {step_id!r} cannot declare `artifact`, `execute`, `model`, `returns`, or prompt text."
+            )
         if not isinstance(stop, str) or not stop.strip():
             raise ValueError(f"Stop step {step_id!r} must declare a non-empty `stop:` value.")
         return MarkdownStep(
@@ -269,11 +280,42 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
             execute=None,
             execute_is_inline=False,
             execute_language=None,
+            artifact=None,
+            artifact_args=None,
             prompt=None,
             model=None,
             stop=stop.strip(),
             returns=None,
         )
+
+    if artifact is not None:
+        if execute is not None or inline_execute_source is not None or prompt or model is not None:
+            raise ValueError(f"Artifact step {step_id!r} cannot declare `execute`, `model`, inline code, or prompt text.")
+        if not isinstance(artifact, str) or not artifact.strip():
+            raise ValueError(f"Artifact step {step_id!r} must declare a non-empty `artifact:` value.")
+        if artifact_args is None:
+            normalized_artifact_args = {}
+        elif isinstance(artifact_args, dict):
+            normalized_artifact_args = artifact_args
+        else:
+            raise ValueError(f"Artifact step {step_id!r} must declare `with:` as a mapping when provided.")
+        normalized_returns = _normalize_returns(step_id=step_id, returns=returns)
+        return MarkdownStep(
+            step_id=step_id,
+            kind="artifact",
+            execute=None,
+            execute_is_inline=False,
+            execute_language=None,
+            artifact=artifact.strip(),
+            artifact_args=normalized_artifact_args,
+            prompt=None,
+            model=None,
+            stop=None,
+            returns=normalized_returns,
+        )
+
+    if artifact_args is not None:
+        raise ValueError(f"Step {step_id!r} cannot declare `with:` without `artifact:`.")
 
     if inline_execute_source is not None:
         if execute is not None:
@@ -310,6 +352,8 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
             execute=execute_target,
             execute_is_inline=inline_execute_source is not None,
             execute_language=file_execute_language,
+            artifact=None,
+            artifact_args=None,
             prompt=None,
             model=None,
             stop=None,
@@ -317,7 +361,7 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
         )
 
     if not prompt:
-        raise ValueError(f"Step {step_id!r} must declare either `execute:`, prompt text, or `stop:`.")
+        raise ValueError(f"Step {step_id!r} must declare either `artifact:`, `execute:`, prompt text, or `stop:`.")
     if returns is not None:
         raise ValueError(f"Prompt-only step {step_id!r} must not declare `returns`.")
     if model is not None and not isinstance(model, str):
@@ -329,6 +373,8 @@ def _parse_step_section(step_id: str, section: str) -> MarkdownStep:
         execute=None,
         execute_is_inline=False,
         execute_language=None,
+        artifact=None,
+        artifact_args=None,
         prompt=prompt,
         model=model.strip() if isinstance(model, str) else None,
         stop=None,
@@ -627,6 +673,33 @@ def _build_step_method(
     step_definition: MarkdownStep,
     method_name: str,
 ):
+    if step_definition.kind == "artifact":
+        artifact_name = step_definition.artifact or ""
+        artifact_args = dict(step_definition.artifact_args or {})
+        artifact = get_artifact(artifact_name)
+
+        async def _artifact_step(self, step_input: Any = None) -> Any:
+            result = await artifact.run(
+                ArtifactContext(
+                    workflow_path=workflow_path,
+                    workflow_dir=workflow_path.parent,
+                    step_id=step_definition.step_id,
+                    step_input=step_input,
+                    markdown_context=_markdown_context(self),
+                    args=artifact_args,
+                )
+            )
+            _store_execute_result(
+                self=self,
+                step_definition=step_definition,
+                result=result,
+            )
+            return result
+
+        _artifact_step.__name__ = method_name
+        _artifact_step.__qualname__ = method_name
+        return step(_artifact_step)
+
     if step_definition.kind == "execute":
         if step_definition.execute_is_inline:
             if step_definition.execute_language == "bash":

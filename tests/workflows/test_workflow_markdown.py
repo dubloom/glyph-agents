@@ -1,7 +1,9 @@
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
+from glyph.artifacts import artifact
 from glyph import AgentQueryCompleted
 import glyph.workflows as workflows_module
 from glyph.workflows.markdown import _load_execute_handler
@@ -95,6 +97,49 @@ execute:
     )
 
     with pytest.raises(ValueError, match="unknown key"):
+        parse_markdown_workflow(workflow_path)
+
+
+def test_parse_markdown_workflow_accepts_artifact_step(tmp_path: Path) -> None:
+    workflow_path = tmp_path / "workflow.md"
+    workflow_path.write_text(
+        """---
+name: review
+---
+
+## Step: getDiff
+artifact: repo.diff
+with:
+  base: origin/main
+returns:
+  diff: dict
+""",
+        encoding="utf-8",
+    )
+
+    definition = parse_markdown_workflow(workflow_path)
+    assert len(definition.steps) == 1
+    step = definition.steps[0]
+    assert step.kind == "artifact"
+    assert step.artifact == "repo.diff"
+    assert step.artifact_args == {"base": "origin/main"}
+    assert step.returns == {"diff": "dict"}
+
+
+def test_parse_markdown_workflow_rejects_with_without_artifact(tmp_path: Path) -> None:
+    workflow_path = tmp_path / "workflow.md"
+    workflow_path.write_text(
+        """---
+name: bad
+---
+
+## Step: getDiff
+with:
+  base: origin/main
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="cannot declare `with:` without `artifact:`"):
         parse_markdown_workflow(workflow_path)
 
 
@@ -297,6 +342,49 @@ returns:
 
     assert result["file_path"] == str(tmp_path / "postcard.txt")
     assert (tmp_path / "postcard.txt").read_text(encoding="utf-8") == "Lisbon"
+
+
+@pytest.mark.asyncio
+async def test_load_markdown_workflow_runs_artifact_step_and_stores_returns(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    artifact_name = f"tests.echo.{uuid4().hex}"
+
+    @artifact(artifact_name)
+    async def _echo_artifact(ctx):
+        prefix = (ctx.args or {}).get("prefix", "")
+        return {"message": f"{prefix}{ctx.step_input}"}
+
+    workflow_path = tmp_path / "workflow.md"
+    workflow_path.write_text(
+        f"""---
+name: artifactFlow
+options:
+  model: gpt-4.1-mini
+---
+
+## Step: transform
+artifact: {artifact_name}
+with:
+  prefix: "value="
+returns:
+  message: str
+
+## Step: summarize
+Result: {{{{ message }}}}
+""",
+        encoding="utf-8",
+    )
+
+    fake_client = _FakeMarkdownClient()
+    monkeypatch.setattr(workflows_module, "GlyphClient", lambda options: fake_client)
+
+    workflow_cls = load_markdown_workflow(workflow_path)
+    result = await workflow_cls.run(initial_input="hello", session_id="markdown-artifact")
+
+    assert fake_client.prompts == [("Result: value=hello", "markdown-artifact")]
+    assert isinstance(result, AgentQueryCompleted)
+    assert result.message == "Result: value=hello"
 
 
 @pytest.mark.asyncio

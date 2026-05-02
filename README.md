@@ -129,6 +129,45 @@ Write one crisp sentence about {{ topic }}.
 Use a model from the same provider as the workflow default. See
 `examples/21_workflow_markdown_model_override/`.
 
+## Glyph Artifacts
+
+Artifacts are built-in deterministic workflow steps you can invoke with
+`artifact:` metadata. They are useful when you want reusable operations like
+collecting a git diff, reading commit metadata, listing worktrees, or gathering
+failed CI jobs before asking the model to analyze the result.
+
+````markdown
+---
+name: reviewWithCiContext
+options:
+  model: gpt-5.4-mini
+---
+
+## Step: getDiff
+artifact: repo.diff
+with:
+  base: origin/main
+returns:
+  diff: dict
+
+## Step: getFailedJobs
+artifact: change_request.failed_jobs
+with:
+  provider: github
+  id: 123
+returns:
+  failed_jobs: list
+
+## Step: reviewFailure
+Explain what likely broke and whether the diff caused it.
+
+Diff:
+{{ diff.patch }}
+
+Failed jobs:
+{{ failed_jobs }}
+````
+
 ## Install
 
 ```bash
